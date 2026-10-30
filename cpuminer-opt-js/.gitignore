@@ -1,0 +1,10 @@
+node_modules/
+dist/
+native/out/
+.cache/
+*.log
+src/wasm/variants/
+src/algos.generated.ts
+# verthash dataset (1.28 GB), created in the working directory by default
+verthash.dat
+.DS_Store

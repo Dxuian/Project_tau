@@ -1,0 +1,10 @@
+# syntax=docker/dockerfile:1
+# Primary reference: upstream's main platform (Linux x86_64, GCC), run under
+# Docker's amd64 emulation. Builds the golden-vector harness only.
+FROM debian:trixie
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential libgmp-dev ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src

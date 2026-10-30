@@ -1,0 +1,38 @@
+{
+  "name": "cpuminer-opt-js",
+  "version": "0.1.0",
+  "private": true,
+  "description": "cpuminer-opt compiled to WebAssembly, with a self-contained JS runtime for Node.js and browsers",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/types/src/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./bridge": {
+      "types": "./dist/types/bridge/server.d.ts",
+      "default": "./dist/bridge.js"
+    }
+  },
+  "bin": {
+    "cpuminer-js": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "node --test --test-concurrency=1 test/*.test.ts",
+    "test:browser": "node --test --test-concurrency=1 test/browser/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "playwright-core": "1.64.1",
+    "typescript": "7.0.2"
+  }
+}
