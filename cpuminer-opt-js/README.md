@@ -52,7 +52,11 @@ made by measurement, not by flags.
 
 ## Use it
 
-Everything runs in Docker (nothing to install on the host but Docker Desktop):
+`dist/` in this repo is the built library, ready to use: a website serves it as is and
+Node runs it directly (`node dist/cli.js`, Node 22.3+), so users never build anything.
+
+Building is only needed after changing the code. Everything runs in Docker (nothing to
+install on the host but Docker); commit the rebuilt `dist/` along with the change:
 
 ```sh
 ./dev setup        # build the images, install dev dependencies (once)

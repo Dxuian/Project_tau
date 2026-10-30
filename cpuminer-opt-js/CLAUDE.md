@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **No live mining or real pool connections from this machine.** Tests use `test/mock-pool.ts` on 127.0.0.1 only.
 - **Consent-first library:** nothing connects or hashes until `miner.start()`. Don't add stealth features (obfuscation, evading blockers/monitoring).
 - The package is `"private"` with no license field; it is not published.
+- **`dist/` is committed** (it's what websites serve and Node runs). After changing `src/`, `bin/`, `bridge/` or `native/`, rebuild (`./dev wasm` for C changes, then `./dev build`) and commit `dist/` with the change.
 
 ## Commands
 
