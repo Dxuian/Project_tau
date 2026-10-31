@@ -11,6 +11,8 @@ usage: ./dev <command> [args]
   setup          build the regtest bitcoind image and install dependencies
   test [files]   run the tests (starts a fresh private regtest bitcoind)
   bundle         bundle server/cloudflare/worker.js as `wrangler deploy` would (into .wrangler/bundle)
+  site build     build the website (site/) for Node and Vercel (next build)
+  site cf-build  build the website for Cloudflare Workers (OpenNext, into site/.open-next)
   shell [cmd]    open a shell (or run cmd) in the app container
   down           stop the regtest bitcoind
 
@@ -38,6 +40,7 @@ case "$cmd" in
   setup)
     docker compose build bitcoind
     run app npm ci --ignore-scripts
+    run app sh -c "cd site && npm ci --ignore-scripts"
     ;;
   test)
     docker compose up -d --force-recreate bitcoind
@@ -45,6 +48,13 @@ case "$cmd" in
     if [ $# -eq 0 ]; then run app npm test; else run app node --test --test-concurrency=1 "$@"; fi
     ;;
   bundle)       run app npx wrangler deploy --dry-run --config server/cloudflare/wrangler.toml --outdir /repo/.wrangler/bundle ;;
+  site)
+    case "${1:-}" in
+      build)    run app sh -c "cd site && npm run build" ;;
+      cf-build) run app sh -c "cd site && npm run cf:build" ;;
+      *) usage; exit 1 ;;
+    esac
+    ;;
   shell)
     if [ $# -eq 0 ]; then run app bash; else run app "$@"; fi
     ;;

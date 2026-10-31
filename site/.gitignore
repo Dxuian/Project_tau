@@ -1,0 +1,7 @@
+node_modules/
+.next/
+.open-next/
+.wrangler/
+# copied from ../tau-crypto/dist at build time
+public/tau-crypto/
+next-env.d.ts

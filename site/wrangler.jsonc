@@ -1,0 +1,19 @@
+// The site as a Cloudflare Worker (OpenNext). From site/, with your own account:
+//   npm run cf:build     builds .open-next/
+//   npm run cf:deploy    deploys it
+// Set the vars to your payout Worker (server/cloudflare): its URL serves the
+// payout API, and the same host takes the miners' WebSockets.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tau-site",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-07-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "vars": {
+    "PAYOUT_API_URL": "https://tau-payout.REPLACE_WITH_YOUR_SUBDOMAIN.workers.dev",
+    "BRIDGE_URL": "wss://tau-payout.REPLACE_WITH_YOUR_SUBDOMAIN.workers.dev",
+    "POOL_URL": "stratum+tcp://solo.ckpool.org:3333",
+    "NETWORK": "mainnet"
+  }
+}

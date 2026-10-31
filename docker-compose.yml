@@ -12,14 +12,16 @@ services:
     shm_size: 1gb
     environment:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
-      # wrangler: no usage telemetry from this machine
+      # wrangler and Next.js: no usage telemetry from this machine
       WRANGLER_SEND_METRICS: "false"
+      NEXT_TELEMETRY_DISABLED: "1"
       BITCOIND_RPC: http://bitcoind:18443
       BITCOIND_USER: tau
       BITCOIND_PASS: tau
     volumes:
       - .:/repo
       - node_modules:/repo/node_modules
+      - site_node_modules:/repo/site/node_modules
 
   bitcoind:
     build: docker/bitcoind
@@ -38,3 +40,4 @@ services:
 
 volumes:
   node_modules:
+  site_node_modules:
