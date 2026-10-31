@@ -11,7 +11,13 @@
   "name": "tau-site",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-07-30",
-  "compatibility_flags": ["nodejs_compat"],
+  // global_fetch_strictly_public: the payout Worker is on the same workers.dev
+  // subdomain, and Cloudflare refuses fetches from one Worker to another there
+  // (error 1042) unless they go out as public requests.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // Served on tau-site.deathxunnat.workers.dev only, without per-version preview URLs.
+  "workers_dev": true,
+  "preview_urls": false,
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "vars": {
     "PAYOUT_API_URL": "https://project-tau.deathxunnat.workers.dev",
