@@ -3427,6 +3427,29 @@ async function createMiner(options) {
   return new Miner(options);
 }
 
+// src/mine.ts
+var DEFAULT_POOL = "stratum+tcp://solo.ckpool.org:3333";
+async function mineBTC(address, url, options = {}) {
+  const { pool = DEFAULT_POOL, network = "mainnet", ...minerOptions } = options;
+  const { addressScript } = await import("./keys-MW77DFYU.js");
+  addressScript(address, network);
+  if (typeof url !== "string") throw new Error("url is required");
+  const viaBridge = /^wss?:\/\//i.test(url);
+  if (!viaBridge && !/^stratum\+/i.test(url)) {
+    throw new Error("url must be a bridge (ws:// or wss://) or a pool (stratum+tcp:// or stratum+ssl://)");
+  }
+  const miner = await createMiner({
+    pass: "x",
+    ...minerOptions,
+    algo: "sha256d",
+    url: viaBridge ? pool : url,
+    bridge: viaBridge ? url : void 0,
+    user: address
+  });
+  await miner.start();
+  return miner;
+}
+
 export {
   listAlgorithms,
   resolveAlgo,
@@ -3439,5 +3462,7 @@ export {
   hash,
   createStratumClient,
   Miner,
-  createMiner
+  createMiner,
+  DEFAULT_POOL,
+  mineBTC
 };

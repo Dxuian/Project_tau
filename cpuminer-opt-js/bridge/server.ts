@@ -3,61 +3,33 @@
 // one text message is one stratum line. A minimal RFC 6455 server on node:http.
 import { nodeBuiltin } from '../src/env/detect.ts';
 import { LineDecoder, MAX_LINE_BYTES, formatHostPort } from '../src/stratum/client.ts';
+import {
+  LinePipe,
+  MAX_MESSAGE_BYTES,
+  buildAllowlist,
+  parseTarget,
+  requestedTarget,
+  type BridgeBaseOptions,
+  type BridgeConnection,
+  type BridgeInterceptor,
+} from './core.ts';
 
-export interface BridgeOptions {
-  /** Port to listen on; 0 picks a free one. */
-  port: number;
+export { BRIDGE_FEATURES } from './core.ts';
+export type { BridgeConnection, BridgeInterceptor } from './core.ts';
+
+export interface BridgeOptions extends BridgeBaseOptions {
+  /** Port to listen on; 0 picks a free one. Not used with `server`. */
+  port?: number;
   /** Address to bind; default all interfaces. */
   host?: string;
-  /** Pools that may be reached, as host:port. A connection's `target` must match one. */
-  allow: string[];
-  /** If set, the Origin header must be one of these (e.g. https://example.com). */
-  origins?: string[];
-  /** Simultaneous connections (default 256); further ones get HTTP 503. */
-  maxConnections?: number;
   /** Accept any certificate from pools reached with tls=1. Default false. */
   tlsInsecure?: boolean;
-  log?: (line: string) => void;
   /**
-   * Called for each connection after the target and origin checks; the returned
-   * interceptor sees (and may rewrite or drop) every stratum line in both
-   * directions. Returning null refuses the connection with 403. Without it, the
-   * bridge relays messages unchanged.
+   * An existing node:http (or https) server to handle WebSocket upgrades on,
+   * instead of listening on `port`: the app keeps its own routes on it.
    */
-  intercept?: (connection: BridgeConnection) => BridgeInterceptor | null;
+  server?: any;
 }
-
-/** One WebSocket connection, as seen by an interceptor. */
-export interface BridgeConnection {
-  /** Unique per bridge, increasing. */
-  id: number;
-  /** The client's address and port. */
-  peer: string;
-  /** The pool, as host:port. */
-  target: string;
-  tls: boolean;
-  origin: string | null;
-  /** Query parameters of the WebSocket URL. */
-  query: URLSearchParams;
-  /** Sends one line to the client (ignored before it is connected or once it is closing). */
-  reply(line: string): void;
-  /** Closes the WebSocket (code 1008) and the pool connection. */
-  close(reason?: string): void;
-}
-
-/**
- * Each method gets one line without its newline and returns the line to pass on,
- * or null to drop it. A throw closes the connection.
- */
-export interface BridgeInterceptor {
-  fromClient?(line: string): string | null;
-  fromPool?(line: string): string | null;
-  /** The connection has ended (called once). */
-  onClose?(): void;
-}
-
-/** Optional capabilities of this bridge, for callers that depend on them. */
-export const BRIDGE_FEATURES: readonly string[] = Object.freeze(['intercept']);
 
 export interface Bridge {
   /** The port actually bound. */
@@ -73,7 +45,6 @@ const OP_BINARY = 0x2;
 const OP_CLOSE = 0x8;
 const OP_PING = 0x9;
 const OP_PONG = 0xa;
-const MAX_MESSAGE_BYTES = MAX_LINE_BYTES;
 const CONNECT_TIMEOUT_MS = 30_000;
 const CLOSE_GRACE_MS = 2_000;
 const KEEPALIVE_MS = 50_000;
@@ -275,14 +246,6 @@ function isUtf8(bytes: Uint8Array): boolean {
   }
 }
 
-/** host:port (or [v6]:port) with a lower-case host, or null. */
-function parseTarget(text: string | null | undefined): { host: string; port: number } | null {
-  const value = String(text ?? '').trim();
-  const m = /^\[([0-9a-f:.]+)\]:(\d{1,5})$/i.exec(value) ?? /^([a-z0-9._-]+):(\d{1,5})$/i.exec(value);
-  const port = m ? Number(m[2]) : 0;
-  return m && port >= 1 && port <= 65535 ? { host: m[1].toLowerCase(), port } : null;
-}
-
 function unref(timer: unknown): void {
   (timer as { unref?: () => void }).unref?.();
 }
@@ -290,13 +253,8 @@ function unref(timer: unknown): void {
 // ------------------------------------------------------------ server
 
 export async function createBridge(options: BridgeOptions): Promise<Bridge> {
-  const allow = new Map<string, { host: string; port: number }>();
-  for (const entry of options.allow) {
-    const target = parseTarget(entry);
-    if (!target) throw new Error(`invalid allowed pool "${entry}": expected host:port`);
-    allow.set(formatHostPort(target.host, target.port), target);
-  }
-  if (!allow.size) throw new Error('the bridge needs at least one allowed pool (host:port)');
+  const allow = buildAllowlist(options.allow);
+  if (!options.server && options.port === undefined) throw new Error('the bridge needs a port (or a server to attach to)');
   const origins = options.origins?.length ? new Set(options.origins) : null;
   const maxConnections = options.maxConnections ?? 256;
   const log = options.log ?? (() => {});
@@ -313,12 +271,15 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
     socket.on('close', () => sockets.delete(socket));
   };
 
-  const server = http.createServer((_req: any, res: any) => {
-    res.writeHead(426, { 'Content-Type': 'text/plain; charset=utf-8', Upgrade: 'websocket' });
-    res.end('cpuminer-js bridge: connect with a WebSocket\n');
-  });
+  const ownServer = !options.server;
+  const server =
+    options.server ??
+    http.createServer((_req: any, res: any) => {
+      res.writeHead(426, { 'Content-Type': 'text/plain; charset=utf-8', Upgrade: 'websocket' });
+      res.end('cpuminer-js bridge: connect with a WebSocket\n');
+    });
 
-  server.on('upgrade', (req: any, socket: any, head: Uint8Array) => {
+  const onUpgrade = (req: any, socket: any, head: Uint8Array) => {
     track(socket);
     // http.Server sockets allow half-open connections: when the client ends, finish ours too.
     socket.on('end', () => {
@@ -358,12 +319,10 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
     } catch {
       return refuse(400, 'invalid request URL');
     }
-    // Only exact allowlist entries: the bridge must never become an open proxy.
-    const requested = parseTarget(query.get('target'));
-    const target = requested && allow.get(formatHostPort(requested.host, requested.port));
-    if (!target) return refuse(403, 'target not allowed');
-    const tlsFlag = query.get('tls') ?? '0';
-    if (tlsFlag !== '0' && tlsFlag !== '1') return refuse(400, 'tls must be 0 or 1');
+    const wanted = requestedTarget(query, allow);
+    if ('status' in wanted) return refuse(wanted.status, wanted.why);
+    const { target } = wanted;
+    const tlsFlag = wanted.tls ? '1' : '0';
     if (active >= maxConnections) return refuse(503, 'too many connections');
 
     // The connection's reply/close work once accept() has run.
@@ -442,7 +401,8 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
     pool.on(ready, onReady);
     pool.on('close', onPoolFailed);
     socket.on('close', onClientGone);
-  });
+  };
+  server.on('upgrade', onUpgrade);
 
   /** Completes the handshake and relays between the WebSocket and the pool. */
   function accept(
@@ -493,29 +453,17 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
       pool.end(); // let the last lines reach the pool
       unref(setTimeout(() => pool.destroy(), CLOSE_GRACE_MS));
     };
+    let fromPoolPipe: LinePipe | null = null;
+    let fromClientPipe: LinePipe | null = null;
     // A protocol violation fails the connection: close frame, then TCP, no handshake (RFC 6455 7.1.7).
     const fail = (code: number, reason: string) => {
       log(`${peer}: ${reason}`);
       closeReceived = true; // ignore the rest
+      fromPoolPipe?.close();
+      fromClientPipe?.close();
       pool.destroy();
       closeWs(code, reason);
       socket.end();
-    };
-    // Runs an interceptor method; a throw or a multi-line result fails the connection.
-    const filter = (fn: ((line: string) => string | null) | undefined, line: string): string | null => {
-      if (!fn) return line;
-      let out: string | null;
-      try {
-        out = fn.call(interceptor, line);
-      } catch (err) {
-        fail(1011, `interceptor error: ${(err as Error).message}`);
-        return null;
-      }
-      if (out !== null && /[\r\n]/.test(out)) {
-        fail(1011, 'interceptor returned more than one line');
-        return null;
-      }
-      return out;
     };
     link.reply = (line) => {
       if (!closeReceived) sendFrame(OP_TEXT, utf8.encode(line));
@@ -523,6 +471,7 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
     link.close = (reason = 'closed by the bridge') => {
       log(`${peer}: ${reason}`);
       closeReceived = true;
+      fromClientPipe?.close();
       endPool();
       closeWs(1008, reason);
       socket.end();
@@ -530,6 +479,16 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
 
     // pool -> client: one text frame per line
     let poolPaused = false;
+    const toClient = (line: string) => {
+      if (!sendFrame(OP_TEXT, utf8.encode(line)) && !poolPaused) {
+        poolPaused = true;
+        pool.pause();
+        socket.once('drain', () => {
+          poolPaused = false;
+          pool.resume();
+        });
+      }
+    };
     pool.on('data', (chunk: Uint8Array) => {
       let received: string[];
       try {
@@ -540,17 +499,9 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
         closeWs(1009, 'pool line too long');
         return;
       }
-      for (const raw of received) {
-        const line = interceptor ? filter(interceptor.fromPool, raw) : raw;
-        if (line === null) continue;
-        if (!sendFrame(OP_TEXT, utf8.encode(line)) && !poolPaused) {
-          poolPaused = true;
-          pool.pause();
-          socket.once('drain', () => {
-            poolPaused = false;
-            pool.resume();
-          });
-        }
+      for (const line of received) {
+        if (fromPoolPipe) fromPoolPipe.push(line);
+        else toClient(line);
       }
     });
     pool.on('close', () => {
@@ -571,6 +522,13 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
         });
       }
     };
+    if (interceptor) {
+      const broken = (err: Error) => fail(1011, `interceptor error: ${err.message}`);
+      const viaPool = interceptor.fromPool ? (line: string) => interceptor.fromPool!(line) : (line: string) => line;
+      const viaClient = interceptor.fromClient ? (line: string) => interceptor.fromClient!(line) : (line: string) => line;
+      fromPoolPipe = new LinePipe(viaPool, toClient, broken);
+      fromClientPipe = new LinePipe(viaClient, (line) => toPool(utf8.encode(`${line}\n`)), broken);
+    }
     const onData = (chunk: Uint8Array) => {
       if (closeReceived) return;
       let messages: WsMessage[];
@@ -587,7 +545,7 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
             return;
           }
           if (closeSent) continue;
-          if (interceptor) {
+          if (fromClientPipe) {
             // Every line of the message passes the interceptor on its own.
             let text: string;
             try {
@@ -596,12 +554,7 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
               fail(1007, 'invalid UTF-8 in a message');
               return;
             }
-            for (const raw of text.split(/\r?\n/)) {
-              if (!raw.trim()) continue;
-              const out = filter(interceptor.fromClient, raw);
-              if (closeReceived) return;
-              if (out !== null) toPool(utf8.encode(`${out}\n`));
-            }
+            for (const raw of text.split(/\r?\n/)) if (raw.trim()) fromClientPipe.push(raw);
             continue;
           }
           const line = asLine(message.payload);
@@ -622,27 +575,33 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
     socket.on('data', onData);
     socket.on('close', () => {
       if (closeTimer) clearTimeout(closeTimer);
+      fromPoolPipe?.close();
+      fromClientPipe?.close();
       endPool();
       log(`${peer} disconnected from ${label}`);
     });
     if (head?.length) onData(head);
   }
 
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(options.port, options.host, () => {
-      server.off('error', reject);
-      resolve();
+  if (ownServer) {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(options.port, options.host, () => {
+        server.off('error', reject);
+        resolve();
+      });
     });
-  });
+  }
 
   let closing: Promise<void> | null = null;
   return {
-    port: server.address().port,
+    port: server.address()?.port ?? 0,
     close() {
       closing ??= new Promise<void>((resolve) => {
-        server.close(() => resolve());
+        server.off('upgrade', onUpgrade);
         for (const socket of sockets) socket.destroy();
+        if (!ownServer) return resolve(); // the app owns its server
+        server.close(() => resolve());
         server.closeAllConnections?.();
       });
       return closing;
@@ -718,7 +677,7 @@ export function parseBridgeArgs(argv: string[]): BridgeOptions | null {
         throw new Error(`unknown option ${name}\n${BRIDGE_USAGE}`);
     }
   }
-  if (options.port < 0) throw new Error(`--listen is required\n${BRIDGE_USAGE}`);
+  if (options.port === undefined || options.port < 0) throw new Error(`--listen is required\n${BRIDGE_USAGE}`);
   if (!options.allow.length) {
     throw new Error(`--allow is required: the bridge only connects to listed pools\n${BRIDGE_USAGE}`);
   }

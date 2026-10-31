@@ -10,8 +10,12 @@ with a self-contained JavaScript runtime that mines in **Node.js, browsers and w
   the environment supports (WASM SIMD, workers, WebGPU, Node's native crypto, cores,
   memory), then *measures* each candidate backend and picks the fastest plus a thread
   count that fits in memory.
-- **Self-contained**: no native addons, no runtime dependencies, no separate `.wasm` or
-  worker files to host. The WASM is embedded (and only the variants you use are loaded).
+- **Self-contained**: no native addons, nothing to install, no separate `.wasm` or worker
+  files to host. The WASM is embedded (and only the variants you use are loaded); the
+  wallet code's dependencies (Paul Miller's audited `@scure`/`@noble` libraries, exact
+  versions reviewed in [AUDIT.md](AUDIT.md)) are bundled into `dist/`.
+- **Wallets, payout verification and the bridge** as separate entries (below), for sites
+  that share block rewards with the visitors who mine.
 
 > **Nothing mines until you call `start()`.** Mining keeps the CPU (and GPU) busy and
 > uses power. Only mine on devices you own or whose owner has explicitly agreed —
@@ -117,10 +121,27 @@ startButton.onclick = () => miner.start();
 ```
 
 The bridge only connects to allowlisted `host:port` targets, so it can't be used as an
-open proxy. `createBridge({ intercept })` (from `cpuminer-opt-js/bridge`) lets a server see,
-rewrite or drop every stratum line of each connection and reply to the client; the payout
-bridge in `../btc.js` uses it to audit shares (`BRIDGE_FEATURES` lists it). In browsers the miner pauses while the page is hidden (`pauseWhenHidden`).
+open proxy. In browsers the miner pauses while the page is hidden (`pauseWhenHidden`).
 `examples/browser/index.html` is a demo page (serve the project folder and open it).
+`mineBTC(address, url)` is a shortcut: sha256d for `address`, through a bridge (`ws://`,
+`wss://`) or straight to a pool (`stratum+tcp://`, Node).
+
+## Wallets, payouts and the bridge
+
+Mechanisms only: every value (who gets paid, what share, where records live) is a
+parameter, and nothing stores keys or state of its own. `../btc.js` and `../app/` show one
+application built on them.
+
+| entry | what |
+|---|---|
+| `cpuminer-opt-js/wallet` | `createWallet()` (BIP39 words + BIP84 `bc1q…` address, offline), `walletFromMnemonic`, `isValidAddress`, `addressScript`; `payout(to, sats, { mnemonic, chain })` / `buildPayment` (largest-first coin selection, upper-bound fee, change, signing); chain clients `esplora(url)` (mempool.space) and `bitcoinCore({ url, user, pass })` |
+| `cpuminer-opt-js/payouts` | `rebuildBlockHeader(share)` (header from stratum fields, block or not), `verifyBlock(block, { chain, payToScript })` (best chain, confirmations, coinbase, payee), and the engine `verifyPayout(address, { shares, ledger, chain, ownerMnemonic, sharePercent })`: pays a visitor `sharePercent` of each block they provably found, once; `payoutAll`; the `ShareStore` / `PayoutLedger` interfaces and `memoryStores()` |
+| `cpuminer-opt-js/bridge` | `createBridge` (Node; or attached to your own `node:http` server with `server`), `createWorkerBridge` (Cloudflare Workers: pass `connect` from `cloudflare:sockets`), and `createShareAuditor({ poolUser, onShare })`, the interceptor that logs every connection in to the pool as `poolUser` and records each share before forwarding it |
+
+Bridge interceptors (`intercept`) see, rewrite or drop every stratum line, may be async
+(lines stay in order per direction) and can reply to the client; `BRIDGE_FEATURES` lists
+what a build supports. The `PayoutLedger.reserve()` contract is what makes "once" hold
+across processes: it must atomically claim the block and the coins a payment spends.
 
 ## Verification
 

@@ -16,6 +16,7 @@ usage: ./dev <command> [args]
   test           run the Node test suite
   test:browser   run the headless Chromium tests
   bench [args]   cpuminer-js --benchmark (from dist/); --all: per-algo variant prefs
+  audit          re-run the dependency checks recorded in AUDIT.md
   shell [cmd]    open a shell (or run cmd) in the dev container
   clean [--all]  remove build outputs (--all: also images and volumes)
 EOF
@@ -45,7 +46,7 @@ shift || true
 case "$cmd" in
   setup)
     docker compose build
-    run dev npm install
+    run dev npm ci --ignore-scripts
     ;;
   vendor)       run dev node scripts/vendor.mjs "$@" ;;
   wasm)         run dev node scripts/build-wasm.mjs "$@" ;;
@@ -65,6 +66,7 @@ case "$cmd" in
     if [ "${1:-}" = "--all" ]; then run dev node scripts/variant-prefs.mjs
     else run dev node dist/cli.js --benchmark "$@"; fi
     ;;
+  audit)        run dev node scripts/audit.mjs "$@" ;;
   shell)
     if [ $# -eq 0 ]; then run dev bash; else run dev "$@"; fi
     ;;

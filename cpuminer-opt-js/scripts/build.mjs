@@ -1,5 +1,5 @@
-// Builds dist/: the library (ESM, one lazy chunk per WASM variant), the CLI,
-// the bridge and type declarations. The worker is bundled first and inlined
+// Builds dist/: the library (ESM, one lazy chunk per WASM variant), the
+// wallet and payouts entries, the bridge, the CLI and type declarations. The worker is bundled first and inlined
 // as a string, so dist/ needs no separate worker or .wasm files.
 // Runs inside the dev container: ./dev build
 import { spawnSync } from 'node:child_process';
@@ -25,7 +25,8 @@ const common = {
   target: 'es2022',
   platform: 'neutral',
   logLevel: 'warning',
-  legalComments: 'none',
+  // Keeps the license headers of the bundled @scure/@noble code.
+  legalComments: 'eof',
   absWorkingDir: ROOT,
 };
 
@@ -49,10 +50,16 @@ const inlineWorker = {
   },
 };
 
-// 2. Library, CLI and bridge, sharing chunks.
+// 2. Library, wallet, payouts, bridge and CLI, sharing chunks.
 await esbuild.build({
   ...common,
-  entryPoints: { index: 'src/index.ts', cli: 'bin/cli.ts', bridge: 'bridge/server.ts' },
+  entryPoints: {
+    index: 'src/index.ts',
+    wallet: 'src/wallet/index.ts',
+    payouts: 'src/payouts/index.ts',
+    bridge: 'bridge/index.ts',
+    cli: 'bin/cli.ts',
+  },
   format: 'esm',
   splitting: true,
   outdir: DIST,

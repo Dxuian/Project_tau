@@ -1,5 +1,6 @@
 import {
   BUILT_VARIANTS,
+  DEFAULT_POOL,
   Miner,
   algoInfo,
   autotune,
@@ -10,8 +11,9 @@ import {
   hash,
   listAlgorithms,
   listBackends,
+  mineBTC,
   resolveAlgo
-} from "./chunks/chunk-FWHIWHFC.js";
+} from "./chunks/chunk-FITWV66I.js";
 import {
   detect,
   detectRuntime,
@@ -19,6 +21,7 @@ import {
 } from "./chunks/chunk-4FZYJI2W.js";
 export {
   BUILT_VARIANTS,
+  DEFAULT_POOL,
   Miner,
   algoInfo,
   autotune,
@@ -31,6 +34,7 @@ export {
   hash,
   listAlgorithms,
   listBackends,
+  mineBTC,
   parseStratumUrl,
   resolveAlgo
 };

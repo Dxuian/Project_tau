@@ -589,6 +589,56 @@ test('intercept: close() ends the connection with 1008 and a multi-line result f
   assert.equal(pool.messages('two').length, 0);
 });
 
+test('intercept: async methods keep each direction in order', async (t) => {
+  const { pool, bridge } = await setup(t, {
+    intercept: () => ({
+      async fromClient(line) {
+        const msg = JSON.parse(line);
+        await sleep(msg.id === 1 ? 30 : 1); // the first line is the slowest
+        if (msg.method === 'mining.authorize') msg.params[0] = 'owner';
+        return JSON.stringify(msg);
+      },
+      fromPool: async (line) => (line.includes('mining.set_difficulty') ? null : line),
+    }),
+  });
+  const ws = await RawWs.upgraded(bridge.port, targetPath(pool.target));
+  ws.send(OP.text, '{"id":1,"method":"mining.subscribe","params":[]}');
+  ws.send(OP.text, '{"id":2,"method":"mining.authorize","params":["visitor","x"]}');
+  await pool.waitForMethod('mining.authorize');
+  assert.deepEqual(pool.received.map((r) => r.msg.id), [1, 2]);
+  assert.deepEqual(pool.messages('mining.authorize')[0].params, ['owner', 'x']);
+  pool.setDifficulty(5);
+  pool.notify(EXAMPLE_JOB);
+  const texts: string[] = [];
+  await ws.next((f) => {
+    texts.push(f.payload.toString());
+    return f.payload.toString().includes('mining.notify');
+  });
+  assert.ok(!texts.some((x) => x.includes('mining.set_difficulty')));
+});
+
+test('attaches to an existing http server, which keeps its own routes', async (t) => {
+  const pool = await MockPool.start();
+  t.after(() => pool.close());
+  const { createServer } = await import('node:http');
+  const server = createServer((_req, res) => {
+    res.writeHead(200);
+    res.end('app route');
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  const bridge = await createBridge({ server, allow: [pool.target] });
+  const port = (server.address() as { port: number }).port;
+  assert.equal(bridge.port, port);
+  assert.equal(await (await fetch(`http://127.0.0.1:${port}/payout`)).text(), 'app route');
+  const c = stratum(t, pool.url, `ws://127.0.0.1:${port}`);
+  await c.connect();
+  assert.deepEqual(pool.messages('mining.authorize')[0].params, ['worker', 'x']);
+  c.close();
+  await bridge.close(); // detaches; the app's server keeps serving
+  assert.equal(await (await fetch(`http://127.0.0.1:${port}/x`)).text(), 'app route');
+});
+
 test('parseBridgeArgs reads the CLI options', () => {
   assert.deepEqual(
     parseBridgeArgs([

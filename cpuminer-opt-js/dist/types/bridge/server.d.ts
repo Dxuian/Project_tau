@@ -1,54 +1,19 @@
-export interface BridgeOptions {
-    /** Port to listen on; 0 picks a free one. */
-    port: number;
+import { type BridgeBaseOptions } from './core.ts';
+export { BRIDGE_FEATURES } from './core.ts';
+export type { BridgeConnection, BridgeInterceptor } from './core.ts';
+export interface BridgeOptions extends BridgeBaseOptions {
+    /** Port to listen on; 0 picks a free one. Not used with `server`. */
+    port?: number;
     /** Address to bind; default all interfaces. */
     host?: string;
-    /** Pools that may be reached, as host:port. A connection's `target` must match one. */
-    allow: string[];
-    /** If set, the Origin header must be one of these (e.g. https://example.com). */
-    origins?: string[];
-    /** Simultaneous connections (default 256); further ones get HTTP 503. */
-    maxConnections?: number;
     /** Accept any certificate from pools reached with tls=1. Default false. */
     tlsInsecure?: boolean;
-    log?: (line: string) => void;
     /**
-     * Called for each connection after the target and origin checks; the returned
-     * interceptor sees (and may rewrite or drop) every stratum line in both
-     * directions. Returning null refuses the connection with 403. Without it, the
-     * bridge relays messages unchanged.
+     * An existing node:http (or https) server to handle WebSocket upgrades on,
+     * instead of listening on `port`: the app keeps its own routes on it.
      */
-    intercept?: (connection: BridgeConnection) => BridgeInterceptor | null;
+    server?: any;
 }
-/** One WebSocket connection, as seen by an interceptor. */
-export interface BridgeConnection {
-    /** Unique per bridge, increasing. */
-    id: number;
-    /** The client's address and port. */
-    peer: string;
-    /** The pool, as host:port. */
-    target: string;
-    tls: boolean;
-    origin: string | null;
-    /** Query parameters of the WebSocket URL. */
-    query: URLSearchParams;
-    /** Sends one line to the client (ignored before it is connected or once it is closing). */
-    reply(line: string): void;
-    /** Closes the WebSocket (code 1008) and the pool connection. */
-    close(reason?: string): void;
-}
-/**
- * Each method gets one line without its newline and returns the line to pass on,
- * or null to drop it. A throw closes the connection.
- */
-export interface BridgeInterceptor {
-    fromClient?(line: string): string | null;
-    fromPool?(line: string): string | null;
-    /** The connection has ended (called once). */
-    onClose?(): void;
-}
-/** Optional capabilities of this bridge, for callers that depend on them. */
-export declare const BRIDGE_FEATURES: readonly string[];
 export interface Bridge {
     /** The port actually bound. */
     port: number;

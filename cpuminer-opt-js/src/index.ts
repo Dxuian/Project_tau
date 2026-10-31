@@ -13,6 +13,8 @@ export { benchmark } from './benchmark.ts';
 export type { BenchmarkOptions, BenchmarkResult } from './benchmark.ts';
 export { hash } from './hash.ts';
 export { createMiner, Miner } from './miner.ts';
+export { DEFAULT_POOL, mineBTC } from './mine.ts';
+export type { MineOptions } from './mine.ts';
 export type { MinerEvents, MinerOptions, MinerState, MinerStats, ShareEvent } from './miner.ts';
 export { createStratumClient, parseStratumUrl } from './stratum/index.ts';
 export { listBackends } from './backends/index.ts';
