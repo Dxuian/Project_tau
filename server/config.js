@@ -1,6 +1,7 @@
 // Your payout service's settings. Every value the library needs is a parameter
 // here, read from environment variables (Node) or Worker vars (Cloudflare).
-// The only secret, OWNER_MNEMONIC, is read separately by the entry points.
+// The secrets, OWNER_MNEMONIC and DB_PASSWORD (the TiDB connection string), are
+// read separately by the entry points.
 import { bitcoinCore, esplora, isValidAddress } from '../tau-crypto/dist/wallet.js';
 
 export const DEFAULTS = Object.freeze({
@@ -22,6 +23,8 @@ export const DEFAULTS = Object.freeze({
   maxFeeRate: 200,
   chain: Object.freeze({ type: 'esplora', url: 'https://mempool.space/api' }),
   storage: Object.freeze({ type: 'file', dir: 'payout-ledger' }),
+  /** Delete ordinary (non-block) shares older than this many days; 0 keeps them all. */
+  shareRetentionDays: 30,
   /** Web pages allowed to connect and call /payout. */
   origins: Object.freeze([]),
   listen: 8080,
@@ -44,7 +47,8 @@ const list = (value) => (value ? String(value).split(',').map((s) => s.trim()).f
  *   TAU_ADDRESS_PERIOD_MS, TAU_ADDRESS_EPOCH, TAU_CLIENT_SHARE_PERCENT,
  *   TAU_MIN_CONFIRMATIONS, TAU_MAX_FEE_RATE,
  *   TAU_CHAIN (esplora | bitcoin-core), TAU_CHAIN_URL, TAU_CHAIN_USER, TAU_CHAIN_PASS,
- *   TAU_STORAGE (file | d1 | memory), TAU_STORAGE_DIR, TAU_D1_BINDING,
+ *   TAU_STORAGE (file | d1 | tidb | memory), TAU_STORAGE_DIR, TAU_D1_BINDING, TAU_DB_NAME,
+ *   TAU_SHARE_RETENTION_DAYS,
  *   TAU_ORIGINS (comma-separated), TAU_LISTEN, TAU_HOST, TAU_SWEEP_INTERVAL_MS.
  * `overrides` (an object with the same keys as DEFAULTS) win over the environment.
  */
@@ -69,9 +73,12 @@ export function loadConfig(env = globalThis.process?.env ?? {}, overrides = {}) 
     storage:
       storageType === 'd1'
         ? { type: 'd1', binding: env.TAU_D1_BINDING ?? 'DB' }
-        : storageType === 'file'
-          ? { type: 'file', dir: env.TAU_STORAGE_DIR ?? DEFAULTS.storage.dir }
-          : { type: storageType },
+        : storageType === 'tidb'
+          ? { type: 'tidb', database: env.TAU_DB_NAME || 'tau' }
+          : storageType === 'file'
+            ? { type: 'file', dir: env.TAU_STORAGE_DIR ?? DEFAULTS.storage.dir }
+            : { type: storageType },
+    shareRetentionDays: int(env.TAU_SHARE_RETENTION_DAYS, DEFAULTS.shareRetentionDays, 'TAU_SHARE_RETENTION_DAYS'),
     origins: list(env.TAU_ORIGINS),
     listen: int(env.TAU_LISTEN, DEFAULTS.listen, 'TAU_LISTEN'),
     host: env.TAU_HOST ?? DEFAULTS.host,
@@ -98,9 +105,10 @@ export function validateConfig(c) {
   if (!(c.maxFeeRate > 0)) throw new Error('maxFeeRate must be positive');
   if (c.chain?.type === 'bitcoin-core' && !c.chain.url) throw new Error('TAU_CHAIN_URL is required for bitcoin-core');
   if (!['esplora', 'bitcoin-core'].includes(c.chain?.type)) throw new Error('chain must be esplora or bitcoin-core');
-  if (!['file', 'd1', 'memory'].includes(c.storage?.type)) throw new Error('storage must be file, d1 or memory');
-  if (c.target === 'cloudflare' && c.storage.type !== 'd1') throw new Error('the cloudflare target stores records in D1 (TAU_STORAGE=d1)');
+  if (!['file', 'd1', 'tidb', 'memory'].includes(c.storage?.type)) throw new Error('storage must be file, d1, tidb or memory');
+  if (c.target === 'cloudflare' && !['d1', 'tidb'].includes(c.storage.type)) throw new Error('the cloudflare target stores records in D1 or TiDB (TAU_STORAGE=d1 or tidb)');
   if (c.target === 'node' && c.storage.type === 'd1') throw new Error('D1 storage is for the cloudflare target');
+  if (!Number.isSafeInteger(c.shareRetentionDays) || c.shareRetentionDays < 0) throw new Error('shareRetentionDays (TAU_SHARE_RETENTION_DAYS) must be 0 or more');
   return c;
 }
 
@@ -112,4 +120,9 @@ export function chainFromConfig(chain) {
 /** config's address period as the library's SlotOptions, or undefined for one address. */
 export function addressPeriod(config) {
   return config.addressPeriodMs > 0 ? { periodMs: config.addressPeriodMs, epochMs: Date.parse(config.addressEpoch) } : undefined;
+}
+
+/** The ISO time before which ordinary shares may be purged, or null when they're kept forever. */
+export function shareCutoff(config, now = Date.now()) {
+  return config.shareRetentionDays > 0 ? new Date(now - config.shareRetentionDays * 86_400_000).toISOString() : null;
 }

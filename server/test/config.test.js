@@ -5,7 +5,7 @@ import { poolTarget } from '../../tau-crypto/dist/bridge.js';
 import { memoryStores } from '../../tau-crypto/dist/payouts.js';
 import { accountXpub, createWallet, newAddress } from '../../tau-crypto/dist/wallet.js';
 import { createPayoutApi } from '../api.js';
-import { loadConfig } from '../config.js';
+import { loadConfig, shareCutoff } from '../config.js';
 import { OWNER, OWNER_WORDS } from './helpers.js';
 
 test('defaults, and overrides from the environment', () => {
@@ -48,6 +48,20 @@ test('rejects unusable settings', () => {
   assert.throws(() => loadConfig({ ...ok, TAU_ADDRESS_PERIOD_MS: '500' }), /0 or at least 1000/);
   assert.throws(() => loadConfig({ ...ok, TAU_ADDRESS_PERIOD_MS: '1.5' }), /whole number/);
   assert.throws(() => loadConfig({ ...ok, TAU_ADDRESS_EPOCH: 'yesterday' }), /ISO time/);
+  assert.throws(() => loadConfig({ ...ok, TAU_STORAGE: 'postgres' }), /file, d1, tidb or memory/);
+  assert.throws(() => loadConfig({ ...ok, TAU_SHARE_RETENTION_DAYS: '-1' }), /0 or more/);
+  assert.throws(() => loadConfig({ ...ok, TAU_SHARE_RETENTION_DAYS: '1.5' }), /whole number/);
+});
+
+test('records in TiDB Cloud (either target), and how long ordinary shares are kept', () => {
+  const tidb = loadConfig({ TAU_OWNER_ADDRESS: OWNER, TAU_STORAGE: 'tidb' });
+  assert.deepEqual(tidb.storage, { type: 'tidb', database: 'tau' });
+  const named = loadConfig({ TAU_OWNER_ADDRESS: OWNER, TAU_TARGET: 'cloudflare', TAU_STORAGE: 'tidb', TAU_DB_NAME: 'tau_prod' });
+  assert.deepEqual(named.storage, { type: 'tidb', database: 'tau_prod' });
+  const at = Date.UTC(2026, 9, 31);
+  assert.equal(tidb.shareRetentionDays, 30);
+  assert.equal(shareCutoff(tidb, at), '2026-10-01T00:00:00.000Z', 'shares older than 30 days go');
+  assert.equal(shareCutoff(loadConfig({ TAU_OWNER_ADDRESS: OWNER, TAU_SHARE_RETENTION_DAYS: '0' }), at), null, '0 keeps every share');
 });
 
 test("refuses an OWNER_MNEMONIC that isn't the owner address's wallet", () => {

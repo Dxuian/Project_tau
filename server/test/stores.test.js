@@ -1,5 +1,8 @@
-// The storage adapters (files for Node, D1 for Cloudflare) against the same
-// contract, then the real payout engine on each: one payout per block.
+// The storage adapters (files for Node, D1 for Cloudflare, TiDB for either)
+// against the same contract, then the real payout engine on each: one payout
+// per block. TiDB runs locally in Docker (TIDB_TEST_URL, see server/dev test).
+// Each SQL database starts empty and gets its tables from the committed
+// migrations, as a deployed one does.
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -11,7 +14,8 @@ import { createPayoutApi } from '../api.js';
 import { d1Stores } from '../cloudflare/d1-stores.js';
 import { loadConfig } from '../config.js';
 import { fileStores } from '../node/file-stores.js';
-import { OWNER, OWNER_WORDS, findBlockThrough, mockChainWith } from './helpers.js';
+import { tidbStores } from '../tidb/tidb-stores.js';
+import { OWNER, OWNER_WORDS, findBlockThrough, migrateD1, mockChainWith, tidbTestDatabase } from './helpers.js';
 
 let mf;
 before(async () => {
@@ -24,14 +28,24 @@ const kinds = {
   file: () => {
     const dir = mkdtempSync(join(tmpdir(), 'tau-store-'));
     after(() => rmSync(dir, { recursive: true, force: true }));
-    return fileStores(dir);
+    return fileStores(dir, { settleMs: 0 });
   },
   d1: async () => {
     // A fresh database per test: a new Miniflare D1 binding name each time.
     const name = `DB${++n}`;
     await mf.setOptions({ modules: true, script: 'export default { fetch: () => new Response("") }', compatibilityDate: '2026-07-30', d1Databases: [name] });
-    return d1Stores(await mf.getD1Database(name));
+    const binding = await mf.getD1Database(name);
+    await migrateD1(binding);
+    return d1Stores(binding);
   },
+  ...(process.env.TIDB_TEST_URL && {
+    tidb: async () => {
+      // A fresh database per test on the local TiDB.
+      const { db, end } = await tidbTestDatabase(`tau_test_${++n}_${process.pid}`);
+      after(end);
+      return tidbStores(db);
+    },
+  }),
 };
 
 const entry = (blockHash, inputs) => ({
@@ -84,6 +98,30 @@ for (const [kind, make] of Object.entries(kinds)) {
       assert.equal(await ledger.get('h2'), null);
       assert.deepEqual([...(await ledger.usedInputs())], ['c1:0']);
       assert.equal(await ledger.reserve(entry('h2', ['c2:0'])), 'reserved', 'released coins can be used again');
+    });
+
+    test('purge drops old ordinary shares and their verdicts, never blocks or payouts', async () => {
+      const stores = await make();
+      const { shares, ledger } = stores;
+      const old = '2026-01-01T00:00:00.000Z';
+      const base = { type: 'share', v: 1, conn: 1, peer: 'p', jobId: 'j', job: {}, xn1: '', xn2: '', ntime: '', nonce: '', difficulty: null, ownerSats: null, visitor: 'a' };
+      await shares.add({ ...base, id: 'block', blockHash: 'h1', isBlock: true, time: old });
+      await shares.add({ ...base, id: 'ordinary', blockHash: 'h2', isBlock: false, time: old });
+      await shares.add({ ...base, id: 'recent', blockHash: 'h3', isBlock: false, time: new Date().toISOString() });
+      await shares.addResult({ type: 'result', v: 1, share: 'ordinary', time: old, accepted: true, error: null });
+      await shares.addResult({ type: 'result', v: 1, share: 'block', time: old, accepted: true, error: null });
+      await ledger.reserve(entry('h1', ['c1:0']));
+      await ledger.markSent('h1', 'ab'.repeat(32));
+
+      const cutoff = '2026-06-01T00:00:00.000Z';
+      assert.equal(await stores.purge(cutoff), 2, 'the old ordinary share and its verdict');
+      assert.equal(await stores.purge(cutoff), 0, 'nothing more to drop');
+      assert.deepEqual((await shares.blocksFor('a')).map((r) => r.id), ['block']);
+      assert.equal((await ledger.get('h1')).status, 'sent');
+      assert.deepEqual([...(await ledger.usedInputs())], ['c1:0']);
+      // Recording carries on after a purge.
+      await shares.add({ ...base, id: 'later', blockHash: 'h4', isBlock: true, time: new Date().toISOString() });
+      assert.deepEqual((await shares.blocksFor('a')).map((r) => r.id).sort(), ['block', 'later']);
     });
 
     test('the payout engine pays once through these stores', async () => {

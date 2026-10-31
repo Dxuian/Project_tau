@@ -6,6 +6,11 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { drizzle as drizzleD1 } from 'drizzle-orm/d1';
+import { migrate as migrateSqlite } from 'drizzle-orm/d1/migrator';
+import { drizzle as drizzleMysql } from 'drizzle-orm/mysql2';
+import { migrate as migrateMysql } from 'drizzle-orm/mysql2/migrator';
+import mysql from 'mysql2/promise';
 import { mineBTC } from '../../tau-crypto/dist/index.js';
 import { addressSlot, rebuildBlockHeader } from '../../tau-crypto/dist/payouts.js';
 import { addressScript, bitcoinCore, newAddress } from '../../tau-crypto/dist/wallet.js';
@@ -173,6 +178,8 @@ export async function nextSlot() {
 
 /** server/ (where wrangler is installed and the Worker's config lives). */
 export const SERVER = fileURLToPath(new URL('..', import.meta.url));
+const TIDB_MIGRATIONS = join(SERVER, 'tidb', 'migrations');
+const D1_MIGRATIONS = join(SERVER, 'cloudflare', 'migrations');
 
 /** The payout Worker bundled by wrangler, as `wrangler deploy` would (into a temporary folder). */
 export function bundleWorker(t) {
@@ -185,4 +192,25 @@ export function bundleWorker(t) {
   });
   assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
   return { out, files: readdirSync(out) };
+}
+
+/**
+ * A new database `name` on the local TiDB the tests run (TIDB_TEST_URL), with
+ * the migrations applied: a Drizzle MySQL database over mysql2 for tidbStores().
+ * Production uses tidb/client.js over TiDB Cloud's HTTPS API, and the same
+ * migrations (tidb/migrate.js).
+ */
+export async function tidbTestDatabase(name) {
+  const admin = await mysql.createConnection(process.env.TIDB_TEST_URL);
+  await admin.query(`CREATE DATABASE \`${name}\``);
+  await admin.end();
+  const pool = mysql.createPool({ uri: `${process.env.TIDB_TEST_URL}/${name}`, connectionLimit: 8 });
+  const db = drizzleMysql({ client: pool });
+  await migrateMysql(db, { migrationsFolder: TIDB_MIGRATIONS });
+  return { db, end: () => pool.end() };
+}
+
+/** Applies the D1 migrations (cloudflare/migrations) to a Miniflare D1 database, as `wrangler d1 migrations apply` does to a real one. */
+export async function migrateD1(binding) {
+  await migrateSqlite(drizzleD1(binding), { migrationsFolder: D1_MIGRATIONS });
 }

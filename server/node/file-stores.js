@@ -1,5 +1,6 @@
 // Node storage: append-only JSON-lines files in one directory.
-//   shares.jsonl   every share and pool verdict (audit trail)
+//   shares.jsonl   every share and pool verdict (audit trail); purge() rotates it
+//                  to shares.<ms>.jsonl and trims old ordinary shares from those
 //   blocks.jsonl   the shares that are blocks (what payouts look up)
 //   payouts.jsonl  payout entries: pending -> sent, or void
 // reserve(), markSent() and void() hold an exclusive lock file, so separate
@@ -33,7 +34,7 @@ function append(file, value) {
   }
 }
 
-export function fileStores(dir = 'payout-ledger', { lockTimeoutMs = 10_000 } = {}) {
+export function fileStores(dir = 'payout-ledger', { lockTimeoutMs = 10_000, settleMs = 60_000 } = {}) {
   if (!fs) throw new Error('file storage needs Node (22.3+)');
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const sharesFile = path.join(dir, 'shares.jsonl');
@@ -128,5 +129,36 @@ export function fileStores(dir = 'payout-ledger', { lockTimeoutMs = 10_000 } = {
       });
     },
   };
-  return { shares, ledger };
+  /**
+   * Drops ordinary (non-block) shares, and the pool's verdicts on them, recorded
+   * before `before` (an ISO time), from the share log. blocks.jsonl and the
+   * payouts are never touched. Returns how many records went.
+   *
+   * Appends never wait for a lock, so the current log is renamed first (new
+   * lines start a fresh shares.jsonl), and a rotated log is rewritten only once
+   * no write can still be landing in it (settleMs after its last change).
+   */
+  async function purge(before) {
+    if (fs.existsSync(sharesFile) && fs.statSync(sharesFile).size > 0) fs.renameSync(sharesFile, path.join(dir, `shares.${Date.now()}.jsonl`));
+    const blockShares = new Set(readLines(blocksFile).map((r) => r.id));
+    let removed = 0;
+    for (const name of fs.readdirSync(dir)) {
+      if (!/^shares\.\d+\.jsonl$/.test(name)) continue;
+      const file = path.join(dir, name);
+      if (Date.now() - fs.statSync(file).mtimeMs < settleMs) continue;
+      const lines = readLines(file);
+      const keep = lines.filter((r) => !(r.time < before) || (r.type === 'share' ? r.isBlock : blockShares.has(r.share)));
+      removed += lines.length - keep.length;
+      if (keep.length === lines.length) continue;
+      if (!keep.length) {
+        fs.rmSync(file);
+        continue;
+      }
+      fs.writeFileSync(`${file}.tmp`, keep.map((r) => `${JSON.stringify(r)}\n`).join(''), { mode: 0o600 });
+      fs.renameSync(`${file}.tmp`, file);
+    }
+    return removed;
+  }
+
+  return { shares, ledger, purge };
 }

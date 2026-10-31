@@ -19,6 +19,7 @@ services:
       BITCOIND_RPC: http://bitcoind:18443
       BITCOIND_USER: tau
       BITCOIND_PASS: tau
+      TIDB_TEST_URL: mysql://root@tidb:4000
     volumes:
       - .:/repo
       - node_modules:/repo/server/node_modules
@@ -38,6 +39,11 @@ services:
       - -rpcuser=tau
       - -rpcpassword=tau
       - -printtoconsole=0
+
+  # Tests only: a local, in-memory TiDB (the open-source server TiDB Cloud runs),
+  # so the TiDB store runs its SQL against the real thing.
+  tidb:
+    image: pingcap/tidb:v8.5.8
 
 volumes:
   node_modules:

@@ -4,11 +4,17 @@ import { createServer } from 'node:http';
 import { createBridge, poolTarget } from '../../tau-crypto/dist/bridge/node.js';
 import { memoryStores } from '../../tau-crypto/dist/payouts.js';
 import { createPayoutApi, MAX_BODY_BYTES } from '../api.js';
-import { chainFromConfig, loadConfig } from '../config.js';
+import { chainFromConfig, loadConfig, shareCutoff } from '../config.js';
+import { tidbDatabase } from '../tidb/client.js';
+import { tidbStores } from '../tidb/tidb-stores.js';
 import { fileStores } from './file-stores.js';
 
-export function storesFromConfig(config) {
+const PURGE_EVERY_MS = 3_600_000;
+
+/** The stores config.storage names; `secrets` holds DB_PASSWORD (the TiDB connection string). */
+export function storesFromConfig(config, secrets = process.env) {
   if (config.storage.type === 'file') return fileStores(config.storage.dir);
+  if (config.storage.type === 'tidb') return tidbStores(tidbDatabase(secrets.DB_PASSWORD, { database: config.storage.database }));
   if (config.storage.type === 'memory') return memoryStores();
   throw new Error(`storage ${config.storage.type} isn't available on Node`);
 }
@@ -46,7 +52,8 @@ function serveApi(api) {
  */
 export async function startNodeServer(config, deps = {}) {
   const { log = () => {} } = deps;
-  const { shares, ledger } = deps.stores ?? storesFromConfig(config);
+  const stores = deps.stores ?? storesFromConfig(config);
+  const { shares, ledger } = stores;
   const api = createPayoutApi(config, {
     shares,
     ledger,
@@ -70,11 +77,24 @@ export async function startNodeServer(config, deps = {}) {
     }, config.sweepIntervalMs);
     sweep.unref();
   }
+  // Old ordinary shares go every hour (and once now); blocks and payouts stay.
+  let purger = null;
+  if (shareCutoff(config) && typeof stores.purge === 'function') {
+    const purge = () =>
+      stores.purge(shareCutoff(config)).then(
+        (n) => n && log(`purged ${n} old share records`),
+        (err) => log(`share purge failed: ${err.message}`),
+      );
+    purge();
+    purger = setInterval(purge, PURGE_EVERY_MS);
+    purger.unref();
+  }
   return {
     port: server.address().port,
     api,
     async close() {
       if (sweep) clearInterval(sweep);
+      if (purger) clearInterval(purger);
       await bridge.close();
       await new Promise((resolve) => server.close(() => resolve()));
       server.closeAllConnections?.();

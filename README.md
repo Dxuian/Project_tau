@@ -19,21 +19,29 @@ Inside `server/`:
 | path | what |
 |---|---|
 | `config.js`, `api.js` | the payout service's settings (`TAU_*`), and its HTTP API as a web-standard `fetch(request)`: `GET /address`, `POST /payout`, `GET /health` |
-| `node/` | the Node target: `server.js` serves the bridge and the API on one port; records are kept as files |
-| `cloudflare/` | the Cloudflare target: `worker.js` (the only Cloudflare-specific code), records in D1, `wrangler.toml` |
+| `node/` | the Node target: `server.js` serves the bridge and the API on one port; records are kept as files, or in TiDB |
+| `cloudflare/` | the Cloudflare target: `worker.js` (the only Cloudflare-specific code), `wrangler.toml`; the D1 store, if you use D1 instead of TiDB |
+| `tidb/` | the TiDB Cloud store (MySQL), for either target: the Drizzle schema, its migrations and `migrate.js` |
 | `site/` | the website (Next.js 16): wallet, consent-first mining, payout status |
 | `test/`, `docker/`, `dev` | the tests, the regtest bitcoind image, the `server/dev` commands |
 
-## How it works
+## Architecture
 
-```
-visitor's browser (site)                   site server (Vercel or Cloudflare)      payout service (Node or Cloudflare Worker)
-  wallet: created / entered / restored      /mine/[address] renders this hour's ───▶ GET /address: our address for this hour
-  mines with mineBTC(address, bridge?slot=N) ─────────── wss ──────────────────────▶ bridge + auditor: pool login = that address
-  payout status ──▶ /api/payout ──────────────────────────────────────────────────▶ POST /payout: verify, pay 10%, once
+```mermaid
+flowchart LR
+  client["Client<br/>the visitor's browser:<br/>website, wallet, miner"]
+  server["Server<br/>Cloudflare Workers:<br/>website, payout API, mining bridge"]
+  db[("DB<br/>TiDB Cloud (MySQL)")]
+  client -->|"HTTPS: pages, payout checks"| server
+  client <-->|"WebSocket: mining"| server
+  server <-->|"shares, payouts"| db
 ```
 
-**Hourly addresses.** Slot N (one an hour) is receive index N of our wallet: `1 + whole hours since TAU_ADDRESS_EPOCH`.
+The server also talks to the mining pool and the Bitcoin network.
+
+### Hourly addresses
+
+Slot N (one an hour) is receive index N of our wallet: `1 + whole hours since TAU_ADDRESS_EPOCH`.
 - Everyone mining in that hour mines to that address.
 - Who gets paid comes from the share records, not from the address.
 - Index 0 is our main address. After each payout, our 90% goes there.
@@ -68,7 +76,9 @@ visitor's browser (site)                   site server (Vercel or Cloudflare)   
 | `TAU_POOL` | `stratum+tcp://solo.ckpool.org:3333` | the only pool the bridge connects to |
 | `TAU_NETWORK` | `mainnet` | or `testnet`, `regtest` |
 | `TAU_CHAIN`, `TAU_CHAIN_URL` | `esplora`, `https://mempool.space/api` | or `bitcoin-core` with `TAU_CHAIN_USER` / `TAU_CHAIN_PASS` for your own node |
-| `TAU_STORAGE` | `file` (Node), `d1` (Cloudflare) | `TAU_STORAGE_DIR` (default `payout-ledger`), `TAU_D1_BINDING` (default `DB`) |
+| `TAU_STORAGE` | `file` (Node), `d1` (Cloudflare); our `wrangler.toml` sets `tidb` | `tidb`: TiDB Cloud on either target, tables in the database `TAU_DB_NAME` (default `tau`); `file`: `TAU_STORAGE_DIR` (default `payout-ledger`); `d1`: `TAU_D1_BINDING` (default `DB`) |
+| `DB_PASSWORD` | none | a secret: TiDB Cloud's connection string, `mysql://user:password@host:4000/db`, for `tidb` |
+| `TAU_SHARE_RETENTION_DAYS` | `30` | ordinary shares older than this are deleted every hour; blocks and payouts are always kept. `0` keeps everything. |
 | `TAU_ORIGINS` | none | web pages allowed to connect and call the API directly, comma-separated |
 | `TAU_MIN_CONFIRMATIONS`, `TAU_MAX_FEE_RATE` | `100`, `200` | the minimum confirmations before paying (at least 100); the most it will pay in fees, in sat/vB |
 | `TAU_LISTEN`, `TAU_HOST`, `TAU_SWEEP_INTERVAL_MS` | `8080`, all interfaces, `0` | Node only. The sweep pays every visitor with a mature block on a timer; on Cloudflare, use the cron trigger. |
@@ -84,6 +94,16 @@ Make our wallet a dedicated one with `createWallet()`, not a personal seed. The 
 | `POOL_URL` | the pool that bridge allows (default `stratum+tcp://solo.ckpool.org:3333`) |
 | `NETWORK` | `mainnet` (default), `testnet` or `regtest` |
 
+## Database
+
+The payout service keeps its records in **TiDB Cloud** (MySQL), through **Drizzle**. It can also use Cloudflare D1, or plain files on Node.
+- **Tables:** `tidb/schema.js` (D1: `cloudflare/schema.js`) holds four tables: shares, the pool's verdicts on them, payouts, and the coins each payout spends.
+- **Migrations:** they're SQL files generated from the schema by drizzle-kit, in `tidb/migrations/` (D1: `cloudflare/migrations/`). They're committed, and they are the only thing that creates or changes tables.
+  - After editing a schema, run `server/dev db generate <name>` and commit the new migration. A test fails if a schema changed without one.
+  - Never edit a migration that has been applied.
+- **Applying them:** for TiDB, `npm run db:migrate` (`tidb/migrate.js`). It creates the database `tau` if needed and runs the migrations it hasn't run yet. Run it before deploying a version that brings a migration. For D1, run `wrangler d1 migrations apply`.
+- **Growth:** ordinary shares older than `TAU_SHARE_RETENTION_DAYS` are purged every hour, by the Worker's cron or the Node timer. Blocks and payouts stay.
+
 ## Deploy
 
 **Vercel can host the site but not the bridge**, which needs WebSockets and raw TCP. The payout service therefore runs as a Cloudflare Worker or on a Node server. Every step below runs under your own accounts.
@@ -91,11 +111,21 @@ Make our wallet a dedicated one with `createWallet()`, not a personal seed. The 
 **Payout service, as a Cloudflare Worker.** From `server/`, after `server/dev setup`:
 
 ```sh
-npx wrangler d1 create tau-payouts -c cloudflare/wrangler.toml          # put the id into wrangler.toml
 # edit cloudflare/wrangler.toml: TAU_OWNER_ADDRESS, TAU_ORIGINS
 npx wrangler secret put OWNER_MNEMONIC -c cloudflare/wrangler.toml
+npx wrangler secret put DB_PASSWORD -c cloudflare/wrangler.toml      # TiDB Cloud's connection string
+DB_PASSWORD='mysql://…' npm run db:migrate                          # the tables, before the first deploy
 npx wrangler deploy -c cloudflare/wrangler.toml
 ```
+
+Or connect the repository in the Cloudflare dashboard (Workers Builds):
+- Root directory: `server`.
+- Build command: `npm ci --ignore-scripts`.
+- Deploy command: `npm run db:migrate && npx wrangler deploy -c cloudflare/wrangler.toml`.
+- Add `OWNER_MNEMONIC` and `DB_PASSWORD` as the Worker's secrets.
+- Add `DB_PASSWORD` again as a **build** secret, since the migrate step runs during the build.
+
+For D1 instead of TiDB, see the end of `wrangler.toml`.
 
 Things to check on Cloudflare:
 - Workers can't open connections to private or localhost addresses, so the pool must be public.
@@ -125,7 +155,7 @@ Nothing a visitor says is trusted.
    - it has at least 100 confirmations, so a reorg can't undo it;
    - its coinbase transaction is exactly the one built from that visitor's share;
    - that coinbase pays our address for the share's hour. The service derives that address from our words; it never takes it from the record.
-4. **Each block is paid at most once.** The payout spends that block's reward, from that hour's address. It's reserved before it's broadcast: one atomic step claims the block and the exact coins, using a lock file on Node and one D1 transaction on Cloudflare. Then it's marked `sent`.
+4. **Each block is paid at most once.** The payout spends that block's reward, from that hour's address. It's reserved before it's broadcast: one atomic step claims the block and the exact coins. That step is one transaction in TiDB (one batch in D1, a lock file for the file store), relying on primary keys on the block and on each coin. Then it's marked `sent`.
 
 What it refuses, and why:
 
@@ -150,15 +180,17 @@ What it refuses, and why:
 | `not-paid-yet` | verified, but the payment couldn't be built yet, e.g. no mature funds, or fees above the cap |
 | `needs-review` | a payment was started but not confirmed as sent |
 
-For `needs-review`, first look the txid up on a block explorer. If it never reached the chain, release the attempt with `ledger.void(blockHash)` on the store (`server/node/file-stores.js` or `server/cloudflare/d1-stores.js`). The retry builds the identical transaction, so the visitor is never paid twice.
+For `needs-review`, first look the txid up on a block explorer. If it never reached the chain, release the attempt with `ledger.void(blockHash)` on the store (`server/tidb/tidb-stores.js`, `server/cloudflare/d1-stores.js` or `server/node/file-stores.js`). The retry builds the identical transaction, so the visitor is never paid twice.
 
 ## Security notes
 
 - **Our wallet is a hot wallet** on either target. Every block reward lands in it, so move our 90% from its first address to cold storage after a win.
 - **The xpub is a privacy secret.** It can't spend, but it reveals every address of the wallet.
 - **Words shared by message** sit on that messaging service. The site warns visitors before it shares. It never stores the words itself; only the visitor's download, copy or share puts them anywhere.
-- **The records are trusted.** Anyone who can write our share records could also read `OWNER_MNEMONIC`, so protect the server or the Cloudflare account.
-- **The crypto libraries were reviewed.** The wallet and transaction code is Paul Miller's audited `@scure`/`@noble` libraries, pinned exactly and bundled into the library's `dist/`. The review is in [tau-crypto/AUDIT.md](tau-crypto/AUDIT.md). The site's framework packages (Next.js, React, OpenNext) are pinned exactly and have verified npm registry signatures.
+- **The records are trusted.** Anyone who can write our share records could also read `OWNER_MNEMONIC`, so protect the server, the Cloudflare account and the database. `DB_PASSWORD` is a secret: keep it in the Worker's secrets (and GitHub's, if you use them), never in `wrangler.toml` or the repository.
+- **The crypto libraries were reviewed.** The wallet and transaction code is Paul Miller's audited `@scure`/`@noble` libraries, pinned exactly and bundled into the library's `dist/`. The review is in [tau-crypto/AUDIT.md](tau-crypto/AUDIT.md). Other packages are pinned exactly and have verified npm registry signatures:
+  - the site's framework packages (Next.js, React, OpenNext);
+  - the server's database packages (Drizzle, TiDB's driver).
 
 ## Development
 
@@ -167,14 +199,20 @@ Everything runs in Docker. The host only needs Docker.
 ```sh
 tau-crypto/dev setup   # once: the library's images (the dev image is shared by server/)
 server/dev setup       # the regtest bitcoind image; npm ci --ignore-scripts for server/ and server/site
-server/dev test        # every server and site test (starts a fresh private regtest node)
+server/dev test        # every server and site test (starts a fresh private regtest node and a local TiDB)
+server/dev db generate <name>  # after editing a schema: the next migrations (commit them)
 server/dev site build  # the site with next build;  server/dev site cf-build: with OpenNext for Cloudflare
 server/dev bundle      # the payout Worker as `wrangler deploy` would build it
 ```
 
-The tests use a private **regtest** Bitcoin Core 32.1 node (no peers, no real network) and run Cloudflare's runtime (`workerd`) locally. They cover:
+The tests run without any real network:
+- a private **regtest** Bitcoin Core 32.1 node (no peers);
+- a local TiDB;
+- Cloudflare's runtime (`workerd`).
+
+They cover:
 - the settings and the API;
-- both storage adapters, against one contract;
+- the three storage adapters (TiDB, D1, files), against one contract. The SQL ones start empty and get their tables from the migrations, which must match the schemas;
 - end to end on Node and on the Worker: the real miner mines to our address for the slot, bitcoind accepts the block, and once it's mature the visitor is paid exactly 10%, once, from that address, with our 90% back at our first address;
 - the Worker's Cloudflare glue;
 - the site in headless Chromium:

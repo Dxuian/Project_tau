@@ -10,7 +10,9 @@ usage() {
 usage: server/dev <command> [args]
 
   setup          build the regtest bitcoind image and install dependencies
-  test [files]   run the tests (starts a fresh private regtest bitcoind); files as test/x.test.js
+  test [files]   run the tests (starts a fresh private regtest bitcoind and a local TiDB); files as test/x.test.js
+  db generate [name]  after editing tidb/schema.js or cloudflare/schema.js: write the next migrations (drizzle-kit)
+  db migrate     apply the TiDB migrations to your TiDB Cloud database (DB_PASSWORD from your environment)
   bundle         bundle cloudflare/worker.js as `wrangler deploy` would (into server/.wrangler/bundle)
   site build     build the website (site/) for Node and Vercel (next build)
   site cf-build  build the website for Cloudflare Workers (OpenNext, into site/.open-next)
@@ -45,9 +47,28 @@ case "$cmd" in
     run app sh -c "cd site && npm ci --ignore-scripts"
     ;;
   test)
-    docker compose up -d --force-recreate bitcoind
-    trap 'docker compose stop bitcoind >/dev/null 2>&1 || true' EXIT
+    docker compose up -d --force-recreate bitcoind tidb
+    trap 'docker compose stop bitcoind tidb >/dev/null 2>&1 || true' EXIT
     if [ $# -eq 0 ]; then run app npm test; else run app node --test --test-concurrency=1 "$@"; fi
+    ;;
+  db)
+    case "${1:-}" in
+      generate)
+        name=()
+        if [ -n "${2:-}" ]; then name=(--name "$2"); fi
+        for config in tidb/drizzle.config.js cloudflare/drizzle.config.js; do
+          run app npx drizzle-kit generate --config "$config" ${name[@]+"${name[@]}"}
+        done
+        ;;
+      migrate)
+        if [ -z "${DB_PASSWORD:-}" ]; then
+          echo "Set DB_PASSWORD to your TiDB Cloud connection string first (it stays in your environment)." >&2
+          exit 1
+        fi
+        run -e DB_PASSWORD -e TAU_DB_NAME app npm run db:migrate
+        ;;
+      *) usage; exit 1 ;;
+    esac
     ;;
   bundle)       run app npx wrangler deploy --dry-run --config cloudflare/wrangler.toml --outdir /repo/server/.wrangler/bundle ;;
   site)

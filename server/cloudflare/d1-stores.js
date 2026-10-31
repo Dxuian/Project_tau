@@ -1,98 +1,141 @@
-// Cloudflare D1 storage. reserve() is one D1 batch (a transaction): the payout
-// row (primary key block_hash) and one row per input coin (primary key
-// outpoint) go in together or not at all, so concurrent Workers can never pay
-// one block twice or spend one coin in two payouts.
-const SCHEMA = [
-  'CREATE TABLE IF NOT EXISTS shares (id TEXT PRIMARY KEY, visitor TEXT NOT NULL, block_hash TEXT NOT NULL, is_block INTEGER NOT NULL, time TEXT NOT NULL, record TEXT NOT NULL)',
-  'CREATE INDEX IF NOT EXISTS shares_blocks ON shares (is_block, visitor)',
-  'CREATE INDEX IF NOT EXISTS shares_block_hash ON shares (block_hash)',
-  'CREATE TABLE IF NOT EXISTS share_results (share TEXT NOT NULL, time TEXT NOT NULL, accepted INTEGER NOT NULL, error TEXT)',
-  "CREATE TABLE IF NOT EXISTS payouts (block_hash TEXT PRIMARY KEY, visitor TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending', 'sent')), reward_sats TEXT NOT NULL, amount_sats TEXT NOT NULL, txid TEXT NOT NULL, inputs TEXT NOT NULL, time TEXT NOT NULL, sent_time TEXT)",
-  'CREATE TABLE IF NOT EXISTS payout_inputs (outpoint TEXT PRIMARY KEY, block_hash TEXT NOT NULL)',
-];
+// Cloudflare D1 storage, through Drizzle. reserve() is one D1 batch (a
+// transaction): the payout row (primary key block_hash) and one row per input
+// coin (primary key outpoint) go in together or not at all, so concurrent
+// Workers can never pay one block twice or spend one coin in two payouts.
+//
+// The tables are ./schema.js, created and changed only by the migrations in
+// ./migrations (wrangler d1 migrations apply; the tests apply the same files).
+import { and, eq, exists, inArray, lt, notInArray, sql } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/d1';
+import { payoutInputs, payouts, shareResults, shares as shareRows } from './schema.js';
 
-const toEntry = (row) =>
-  row && {
-    blockHash: row.block_hash,
-    visitor: row.visitor,
-    status: row.status,
-    rewardSats: row.reward_sats,
-    amountSats: row.amount_sats,
-    txid: row.txid,
-    inputs: JSON.parse(row.inputs),
-    time: row.time,
-    ...(row.sent_time ? { sentTime: row.sent_time } : {}),
-  };
+/** Rows per DELETE when purging. */
+const PURGE_BATCH = 5000;
 
-export function d1Stores(db) {
-  if (!db?.prepare) throw new Error('d1Stores needs a D1 database binding');
-  let ready;
-  const schema = () => (ready ??= db.batch(SCHEMA.map((sql) => db.prepare(sql))));
-  const all = async (sql, ...args) => {
-    await schema();
-    return (await db.prepare(sql).bind(...args).all()).results;
-  };
+const toEntry = (row) => ({
+  blockHash: row.blockHash,
+  visitor: row.visitor,
+  status: row.status,
+  rewardSats: row.rewardSats,
+  amountSats: row.amountSats,
+  txid: row.txid,
+  inputs: JSON.parse(row.inputs),
+  time: row.time,
+  ...(row.sentTime ? { sentTime: row.sentTime } : {}),
+});
+/** D1's error (Drizzle wraps single queries in a "Failed query" error). */
+const driverMessage = (err) => String(err?.cause?.message ?? err?.message ?? err);
+
+export function d1Stores(binding) {
+  if (!binding?.prepare) throw new Error('d1Stores needs a D1 database binding');
+  const db = drizzle(binding);
 
   const shares = {
     async add(r) {
-      await schema();
-      await db
-        .prepare('INSERT INTO shares (id, visitor, block_hash, is_block, time, record) VALUES (?, ?, ?, ?, ?, ?)')
-        .bind(r.id, r.visitor, r.blockHash, r.isBlock ? 1 : 0, r.time, JSON.stringify(r))
-        .run();
+      await db.insert(shareRows).values({ id: r.id, visitor: r.visitor, blockHash: r.blockHash, isBlock: Boolean(r.isBlock), time: r.time, record: JSON.stringify(r) });
     },
     async addResult(r) {
-      await schema();
-      await db.prepare('INSERT INTO share_results (share, time, accepted, error) VALUES (?, ?, ?, ?)').bind(r.share, r.time, r.accepted ? 1 : 0, r.error === null ? null : JSON.stringify(r.error)).run();
+      await db.insert(shareResults).values({ share: r.share, time: r.time, accepted: Boolean(r.accepted), error: r.error === null ? null : JSON.stringify(r.error) });
     },
     async blocksFor(visitor) {
-      return (await all('SELECT record FROM shares WHERE is_block = 1 AND visitor = ?', visitor)).map((row) => JSON.parse(row.record));
+      const rows = await db
+        .select({ record: shareRows.record })
+        .from(shareRows)
+        .where(and(eq(shareRows.isBlock, true), eq(shareRows.visitor, visitor)));
+      return rows.map((row) => JSON.parse(row.record));
     },
     async claimants(blockHash) {
-      return (await all('SELECT DISTINCT visitor FROM shares WHERE is_block = 1 AND block_hash = ?', blockHash)).map((row) => row.visitor);
+      const rows = await db
+        .selectDistinct({ visitor: shareRows.visitor })
+        .from(shareRows)
+        .where(and(eq(shareRows.isBlock, true), eq(shareRows.blockHash, blockHash)));
+      return rows.map((row) => row.visitor);
     },
     async visitorsWithBlocks() {
-      return (await all('SELECT DISTINCT visitor FROM shares WHERE is_block = 1')).map((row) => row.visitor);
+      return (await db.selectDistinct({ visitor: shareRows.visitor }).from(shareRows).where(eq(shareRows.isBlock, true))).map((row) => row.visitor);
     },
   };
 
+  const pendingPayout = (blockHash) => and(eq(payouts.blockHash, blockHash), eq(payouts.status, 'pending'));
+
   const ledger = {
     async get(blockHash) {
-      return toEntry((await all('SELECT * FROM payouts WHERE block_hash = ?', blockHash))[0]) ?? null;
+      const [row] = await db.select().from(payouts).where(eq(payouts.blockHash, blockHash));
+      return row ? toEntry(row) : null;
     },
     async reserve(e) {
-      await schema();
       try {
         await db.batch([
-          db
-            .prepare("INSERT INTO payouts (block_hash, visitor, status, reward_sats, amount_sats, txid, inputs, time) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)")
-            .bind(e.blockHash, e.visitor, e.rewardSats, e.amountSats, e.txid, JSON.stringify(e.inputs), e.time),
-          ...e.inputs.map((outpoint) => db.prepare('INSERT INTO payout_inputs (outpoint, block_hash) VALUES (?, ?)').bind(outpoint, e.blockHash)),
+          db.insert(payouts).values({
+            blockHash: e.blockHash,
+            visitor: e.visitor,
+            status: 'pending',
+            rewardSats: e.rewardSats,
+            amountSats: e.amountSats,
+            txid: e.txid,
+            inputs: JSON.stringify(e.inputs),
+            time: e.time,
+          }),
+          // One statement per coin: D1 caps the parameters of a single statement.
+          ...e.inputs.map((outpoint) => db.insert(payoutInputs).values({ outpoint, blockHash: e.blockHash })),
         ]);
         return 'reserved';
       } catch (err) {
-        const message = String(err?.message ?? err);
+        const message = driverMessage(err);
         if (message.includes('payouts.block_hash')) return 'block-taken';
         if (message.includes('payout_inputs.outpoint')) return 'inputs-taken';
         throw err;
       }
     },
     async markSent(blockHash, txid) {
-      await schema();
-      const r = await db.prepare("UPDATE payouts SET status = 'sent', sent_time = ? WHERE block_hash = ? AND txid = ? AND status = 'pending'").bind(new Date().toISOString(), blockHash, txid).run();
-      if (r.meta.changes !== 1) throw new Error(`no pending payout ${txid} for ${blockHash}`);
+      const result = await db
+        .update(payouts)
+        .set({ status: 'sent', sentTime: new Date().toISOString() })
+        .where(and(pendingPayout(blockHash), eq(payouts.txid, txid)));
+      if (result.meta.changes !== 1) throw new Error(`no pending payout ${txid} for ${blockHash}`);
     },
     async usedInputs() {
-      return new Set((await all('SELECT outpoint FROM payout_inputs')).map((row) => row.outpoint));
+      return new Set((await db.select({ outpoint: payoutInputs.outpoint }).from(payoutInputs)).map((row) => row.outpoint));
     },
     async void(blockHash) {
-      await schema();
+      // One batch: the coins go only if their payout is still pending, then the payout.
       const [, deleted] = await db.batch([
-        db.prepare("DELETE FROM payout_inputs WHERE block_hash = ? AND EXISTS (SELECT 1 FROM payouts WHERE block_hash = ? AND status = 'pending')").bind(blockHash, blockHash),
-        db.prepare("DELETE FROM payouts WHERE block_hash = ? AND status = 'pending'").bind(blockHash),
+        db.delete(payoutInputs).where(and(eq(payoutInputs.blockHash, blockHash), exists(db.select({ one: sql`1` }).from(payouts).where(pendingPayout(blockHash))))),
+        db.delete(payouts).where(pendingPayout(blockHash)),
       ]);
       return deleted.meta.changes === 1;
     },
   };
-  return { shares, ledger, ensureSchema: schema };
+
+  /**
+   * Drops ordinary (non-block) shares, and the pool's verdicts on them, recorded
+   * before `before` (an ISO time). Block shares and payouts always stay.
+   * Returns how many records went.
+   */
+  async function purge(before) {
+    const blockShares = db.select({ id: shareRows.id }).from(shareRows).where(eq(shareRows.isBlock, true));
+    // D1 has no DELETE ... LIMIT: each batch deletes the rows a limited SELECT names.
+    const oldResults = () =>
+      db
+        .select({ rowid: sql`rowid` })
+        .from(shareResults)
+        .where(and(lt(shareResults.time, before), notInArray(shareResults.share, blockShares)))
+        .limit(PURGE_BATCH);
+    const oldShares = () =>
+      db
+        .select({ id: shareRows.id })
+        .from(shareRows)
+        .where(and(eq(shareRows.isBlock, false), lt(shareRows.time, before)))
+        .limit(PURGE_BATCH);
+    let removed = 0;
+    for (const batch of [() => db.delete(shareResults).where(inArray(sql`rowid`, oldResults())), () => db.delete(shareRows).where(inArray(shareRows.id, oldShares()))]) {
+      for (let n = PURGE_BATCH; n === PURGE_BATCH; ) {
+        n = (await batch()).meta.changes;
+        removed += n;
+      }
+    }
+    return removed;
+  }
+
+  return { shares, ledger, purge };
 }

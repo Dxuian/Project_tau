@@ -1,8 +1,12 @@
 # Cloudflare target (worker.js). Deploy with your own account, from server/ (where wrangler is installed):
-#   npx wrangler d1 create tau-payouts -c cloudflare/wrangler.toml       -> put the id below
 #   npx wrangler secret put OWNER_MNEMONIC -c cloudflare/wrangler.toml   -> the owner wallet's words (never in this file)
+#   npx wrangler secret put DB_PASSWORD -c cloudflare/wrangler.toml      -> the TiDB Cloud connection string (mysql://user:password@host:4000/db)
 #   npx wrangler secret put TAU_OWNER_XPUB -c cloudflare/wrangler.toml   -> optional: its accountXpub (reveals all its addresses)
+#   DB_PASSWORD='mysql://…' npm run db:migrate                          -> creates the tables / applies new migrations (tidb/migrations)
 #   npx wrangler deploy -c cloudflare/wrangler.toml
+# Or connect the repo in the Cloudflare dashboard (root directory server/): build command npm ci --ignore-scripts,
+# deploy command npm run db:migrate && npx wrangler deploy -c cloudflare/wrangler.toml; add the secrets to the
+# Worker, and DB_PASSWORD also as a build secret (the migrate step runs in the build).
 # Browsers then mine with mineBTC(address, 'wss://<your-worker>.workers.dev').
 name = "tau-payout"
 main = "worker.js"
@@ -21,15 +25,23 @@ TAU_MIN_CONFIRMATIONS = "100"
 TAU_MAX_FEE_RATE = "200"
 TAU_CHAIN = "esplora"
 TAU_CHAIN_URL = "https://mempool.space/api"
-TAU_STORAGE = "d1"
-TAU_D1_BINDING = "DB"
+# Records in TiDB Cloud (the DB_PASSWORD secret), in a database of the app's own, created on first use.
+TAU_STORAGE = "tidb"
+TAU_DB_NAME = "tau"
+# Ordinary shares older than this are deleted by the cron run below; blocks and payouts are kept.
+TAU_SHARE_RETENTION_DAYS = "30"
 TAU_ORIGINS = "https://yoursite.example"
 
-[[d1_databases]]
-binding = "DB"
-database_name = "tau-payouts"
-database_id = "REPLACE_WITH_THE_ID_FROM_wrangler_d1_create"
+# Every hour: pay every visitor with a mature block, and purge old shares.
+[triggers]
+crons = ["0 * * * *"]
 
-# Pay every visitor with a mature block on a schedule (optional):
-# [triggers]
-# crons = ["*/30 * * * *"]
+# For D1 instead of TiDB: npx wrangler d1 create tau-payouts -c cloudflare/wrangler.toml,
+# set TAU_STORAGE = "d1" and TAU_D1_BINDING = "DB", uncomment the block below, and apply the
+# migrations (cloudflare/migrations) before each deploy, instead of npm run db:migrate:
+#   npx wrangler d1 migrations apply tau-payouts --remote -c cloudflare/wrangler.toml
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "tau-payouts"
+# database_id = "REPLACE_WITH_THE_ID_FROM_wrangler_d1_create"
+# migrations_dir = "migrations"

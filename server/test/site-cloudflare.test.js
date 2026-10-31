@@ -15,7 +15,7 @@ import { Miniflare } from 'miniflare';
 import { chromium } from 'playwright-core';
 import { createWallet } from '../../tau-crypto/dist/wallet.js';
 import { startRegtestPool } from './regtest-pool.js';
-import { bundleWorker, nodeReady, ownerReward, regtest, regtestChainEnv, until } from './helpers.js';
+import { bundleWorker, migrateD1, nodeReady, ownerReward, regtest, regtestChainEnv, until } from './helpers.js';
 
 const SITE = fileURLToPath(new URL('../site/', import.meta.url));
 const core = regtest();
@@ -96,6 +96,7 @@ test('the site on Cloudflare: a wallet, the hour address rendered by the site Wo
   });
   t.after(() => payoutWorker.dispose());
   const { port } = await payoutWorker.ready;
+  await migrateD1(await payoutWorker.getD1Database('DB'));
   const service = `http://127.0.0.1:${port}`;
   step('payout Worker up');
   const site = await startSiteWorker({ PAYOUT_API_URL: service, BRIDGE_URL: `ws://127.0.0.1:${port}`, POOL_URL: pool.url, NETWORK: 'regtest' }, t);

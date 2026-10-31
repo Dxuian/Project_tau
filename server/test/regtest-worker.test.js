@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { Miniflare } from 'miniflare';
 import { accountXpub, createWallet, newAddress } from '../../tau-crypto/dist/wallet.js';
 import { startRegtestPool } from './regtest-pool.js';
-import { FAST_SLOTS, bundleWorker, mineBlocks, nodeReady, ownerReward, regtest, regtestChainEnv, slotAddresses } from './helpers.js';
+import { FAST_SLOTS, bundleWorker, migrateD1, mineBlocks, nodeReady, ownerReward, regtest, regtestChainEnv, slotAddresses } from './helpers.js';
 
 const core = regtest();
 
@@ -79,6 +79,7 @@ test("the Worker's Cloudflare glue in workerd: origin and target refusals, 502 f
   });
   t.after(() => mf.dispose());
   const base = await mf.ready;
+  await migrateD1(await mf.getD1Database('DB'));
   const site = { origin: 'https://site.example' };
   assert.equal((await upgradeStatus(base, `/?target=127.0.0.1:${port}&tls=0`)).status, 403, 'no origin');
   const evil = await upgradeStatus(base, '/?target=evil.example:3333&tls=0', site);
@@ -125,6 +126,7 @@ test('Cloudflare target: a visitor mines to a fresh owner address through the Wo
   });
   t.after(() => mf.dispose());
   const url = await mf.ready;
+  await migrateD1(await mf.getD1Database('DB')); // as wrangler d1 migrations apply does before a deploy
   const payout = async () => {
     const res = await mf.dispatchFetch('http://worker.local/payout', { method: 'POST', body: JSON.stringify({ address: visitor.address }) });
     assert.equal(res.status, 200, await res.clone().text());

@@ -9,9 +9,9 @@ The top level holds only `tau-crypto/` (the library), `server/` (everything depl
 ## Rules
 
 - **Everything runs in Docker.** Never run node, npm, tsc, emcc, wrangler, next or tests on the host. Library: `tau-crypto/dev <cmd>` (see `tau-crypto/CLAUDE.md`). Server: `server/dev <cmd>` (it uses the top-level `docker-compose.yml`, working directory `server/`).
-- **No live mining or real-network pool connections from this machine.** Tests use mocks, a private regtest bitcoind (`docker compose` service `bitcoind`: no peers, `-connect=0`) and local workerd via Miniflare / `wrangler dev`. Never `wrangler deploy`, `wrangler login`, `opennextjs-cloudflare deploy` or `vercel`: deployment is the user's step with their own accounts. wrangler and Next.js telemetry are off in the containers (`WRANGLER_SEND_METRICS`, `NEXT_TELEMETRY_DISABLED`).
+- **No live mining or real-network pool connections from this machine.** Tests use mocks, a private regtest bitcoind (`docker compose` service `bitcoind`: no peers, `-connect=0`), a local TiDB (service `tidb`, in memory) and local workerd via Miniflare / `wrangler dev`. Never `wrangler deploy`, `wrangler login`, `opennextjs-cloudflare deploy`, `vercel`, `server/dev db migrate` / `npm run db:migrate` or anything else that touches the user's TiDB Cloud: deployment is the user's step with their own accounts. The connection string (`DB_PASSWORD`) never goes into a file. wrangler and Next.js telemetry are off in the containers (`WRANGLER_SEND_METRICS`, `NEXT_TELEMETRY_DISABLED`).
 - **Consent-first:** nothing mines until a visitor starts it. Don't add stealth features.
-- Private repo, no license, not published. Dependencies are exact-pinned and installed with `--ignore-scripts`. The library's runtime dependencies need the AUDIT.md treatment; the site's framework dependencies (next, react, OpenNext) get `npm audit signatures`.
+- Private repo, no license, not published. Dependencies are exact-pinned and installed with `--ignore-scripts`. The library's runtime dependencies need the AUDIT.md treatment; the site's framework dependencies (next, react, OpenNext) and the server's database packages (drizzle-orm, drizzle-kit, @tidbcloud/serverless) get `npm audit signatures`.
 
 ## Library vs server (keep this split)
 
@@ -26,7 +26,15 @@ The top level holds only `tau-crypto/` (the library), `server/` (everything depl
     - `config.js` (`loadConfig`: every setting from `TAU_*` env vars or Worker vars; `chainFromConfig`, `addressPeriod`);
     - `api.js` (`createPayoutApi`: the library's `createPayoutService` with config, stores and `OWNER_MNEMONIC`; a web-standard `fetch(request)` for `GET /address`, `POST /payout`, `GET /health`);
     - `node/` (`server.js` entry, `index.js` `startNodeServer`, `file-stores.js`);
-    - `cloudflare/` (`worker.js` holds the only Cloudflare-specific code: `connect` from `cloudflare:sockets`, `WebSocketPair`, `cf-connecting-ip`; plus `d1-stores.js`, `schema.sql`, `wrangler.toml`).
+    - `tidb/`: TiDB Cloud (MySQL) for either target, the production store:
+      - `tidb-stores.js`;
+      - `client.js`: `tidbDatabase`, Drizzle over the HTTPS driver;
+      - `schema.js`, `migrations/`;
+      - `migrate.js`, which is `npm run db:migrate`;
+    - `cloudflare/`:
+      - `worker.js` holds the only Cloudflare-specific code: `connect` from `cloudflare:sockets`, `WebSocketPair`, `cf-connecting-ip`;
+      - `d1-stores.js` with its own `schema.js` and `migrations/`;
+      - `wrangler.toml`, with an hourly cron for payouts and the share purge.
   - `site/`: the website, Next.js 16 App Router, plain JS.
     - Client components (`'use client'`) import `tau-crypto/wallet`.
     - The library is copied in, not linked: `scripts/copy-library.mjs` copies `tau-crypto/dist` (on every build) to `lib/tau-crypto/` (imported as `tau-crypto/*` through `jsconfig.json`) and `public/tau-crypto/` (the miner, which the mine page loads at run time, so it is never bundled). The app needs nothing outside its folder, which OpenNext requires.
@@ -35,6 +43,22 @@ The top level holds only `tau-crypto/` (the library), `server/` (everything depl
 - Never re-add a facade that mixes client and server exports (the old `btc.js`): it breaks `'use client'` / `'use server'`.
 - Server code imports the library's committed `dist/`. After changing library code, run `tau-crypto/dev build` and commit `dist/`.
 - The payout Worker must not import `dist/index.js` (it would bundle the WASM miner). `server/test/regtest-worker.test.js` checks the bundle; `tau-crypto/test/entries.test.ts` checks that the edge entries carry no Node built-ins, WASM or Cloudflare names.
+
+## Database (Drizzle)
+
+- **Tables** are defined only in `server/tidb/schema.js` (MySQL) and `server/cloudflare/schema.js` (SQLite, for D1). Keep the two equivalent.
+- **Migrations** are generated, never written by hand:
+  - after editing a schema, run `server/dev db generate <name>` and commit the SQL and the `meta/` it writes;
+  - never edit a migration that may have been applied;
+  - `server/test/migrations.test.js` fails if a schema and its migrations disagree.
+- **The stores only read and write rows.** They never create tables.
+  - The Worker can't read files, so migrations are applied outside it: `npm run db:migrate` for TiDB, which also creates the `tau` database because the connection string names `sys`; `wrangler d1 migrations apply` for D1.
+  - The tests apply the same files with Drizzle's migrators (`tidbTestDatabase`, `migrateD1` in `server/test/helpers.js`).
+  - `tidb/migrate.js` uses `node:fs`: never import it from `worker.js` or anything it imports.
+- **Driver differences:**
+  - affected rows: TiDB Cloud's HTTPS driver returns `{ rowsAffected }`, while mysql2 (local TiDB in the tests) returns `[{ affectedRows }]`;
+  - Drizzle wraps driver errors, so the original is `err.cause`;
+  - D1 has no interactive transactions (use `db.batch`), no `DELETE … LIMIT`, and a cap on parameters per statement.
 
 ## Payout correctness (read before changing it)
 
@@ -52,9 +76,9 @@ The top level holds only `tau-crypto/` (the library), `server/` (everything depl
   - It spends from that address and sends change to index 0.
 - **"Once"** depends on `PayoutLedger.reserve()` atomically claiming the block **and** the payment's input coins:
   - a lock file in `server/node/file-stores.js`;
-  - one D1 batch (primary keys `block_hash`, `outpoint`) in `server/cloudflare/d1-stores.js`.
+  - one transaction in `server/tidb/tidb-stores.js` and one D1 batch in `server/cloudflare/d1-stores.js`, both relying on the primary keys `block_hash` and `outpoint`.
 
-  Both stores run the same contract tests in `server/test/stores.test.js`; keep them in sync.
+  All three stores (and their `purge`, which never touches block shares or payouts) run the same contract tests in `server/test/stores.test.js`; keep them in sync.
 - **Amounts** are bigint satoshis; JSON responses stringify them (`toJson`).
   - The regtest subsidy halves every 150 blocks, so tests compare against what bitcoind reports (`ownerReward` in `server/test/helpers.js`).
   - The end-to-end tests use 2 s slots (`FAST_SLOTS`).
