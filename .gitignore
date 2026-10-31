@@ -1,0 +1,6 @@
+node_modules/
+# server state: share records and payout ledger (contains visitor addresses)
+payout-ledger/
+.env
+*.log
+.DS_Store

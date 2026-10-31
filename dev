@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Host entry point for the top-level project. It only calls `docker compose`;
+# installs, builds and tests run inside the containers in docker-compose.yml.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+usage() {
+  cat <<'USAGE'
+usage: ./dev <command> [args]
+
+  setup          build the regtest bitcoind image and install dependencies
+  test [files]   run the tests (starts a fresh private regtest bitcoind)
+  build          build btc.browser.js
+  audit          re-run the dependency checks recorded in AUDIT.md
+  shell [cmd]    open a shell (or run cmd) in the app container
+  down           stop the regtest bitcoind
+USAGE
+}
+
+if ! docker info >/dev/null 2>&1; then
+  echo "Docker isn't reachable. Start Docker, then retry." >&2
+  exit 1
+fi
+if ! docker image inspect cpuminer-opt-js-dev:local >/dev/null 2>&1; then
+  echo "Missing image cpuminer-opt-js-dev:local: run cpuminer-opt-js/dev setup first." >&2
+  exit 1
+fi
+
+tty_flag=()
+if [ ! -t 0 ] || [ ! -t 1 ]; then tty_flag=(-T); fi
+run() { docker compose run --rm "${tty_flag[@]}" "$@"; }
+
+cmd="${1:-help}"
+shift || true
+case "$cmd" in
+  setup)
+    docker compose build bitcoind
+    run app npm ci --ignore-scripts
+    ;;
+  test)
+    docker compose up -d --force-recreate bitcoind
+    trap 'docker compose stop bitcoind >/dev/null 2>&1 || true' EXIT
+    if [ $# -eq 0 ]; then run app npm test; else run app node --test --test-concurrency=1 "$@"; fi
+    ;;
+  build)        run app npm run build ;;
+  audit)        run app node scripts/audit.mjs "$@" ;;
+  shell)
+    if [ $# -eq 0 ]; then run app bash; else run app "$@"; fi
+    ;;
+  down)         docker compose down ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac

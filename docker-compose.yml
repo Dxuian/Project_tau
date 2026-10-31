@@ -1,0 +1,38 @@
+# Everything for the top-level project runs in these containers (see ./dev).
+# `app` reuses the cpuminer-opt-js dev image (Node 26, Chromium); build it once
+# with `cpuminer-opt-js/dev setup`. `bitcoind` is a private regtest chain for
+# tests only: no peers, no real network.
+name: project-tau
+
+services:
+  app:
+    image: cpuminer-opt-js-dev:local
+    working_dir: /repo
+    init: true
+    shm_size: 1gb
+    environment:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      BITCOIND_RPC: http://bitcoind:18443
+      BITCOIND_USER: tau
+      BITCOIND_PASS: tau
+    volumes:
+      - .:/repo
+      - node_modules:/repo/node_modules
+
+  bitcoind:
+    build: docker/bitcoind
+    image: project-tau-bitcoind:local
+    command:
+      - -regtest
+      - -server
+      - -listen=0
+      - -connect=0
+      - -dnsseed=0
+      - -rpcbind=0.0.0.0
+      - -rpcallowip=0.0.0.0/0
+      - -rpcuser=tau
+      - -rpcpassword=tau
+      - -printtoconsole=0
+
+volumes:
+  node_modules:
