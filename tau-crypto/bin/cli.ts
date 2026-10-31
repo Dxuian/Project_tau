@@ -84,7 +84,7 @@ function formatHps(h: number): string {
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   if (argv[0] === 'bridge') {
-    const { runBridgeCli } = await import('../bridge/server.ts');
+    const { runBridgeCli } = await import('../src/bridge/node.ts');
     await runBridgeCli(argv.slice(1));
     return;
   }

@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **No live mining or real pool connections from this machine.** Tests use `test/mock-pool.ts` on 127.0.0.1 only.
 - **Consent-first library:** nothing connects or hashes until `miner.start()`. Don't add stealth features (obfuscation, evading blockers/monitoring).
 - The package is `"private"` with no license field; it is not published.
-- **`dist/` is committed** (it's what websites serve and Node runs). After changing `src/`, `bin/`, `bridge/` or `native/`, rebuild (`./dev wasm` for C changes, then `./dev build`) and commit `dist/` with the change.
+- **`dist/` is committed** (it's what websites serve and Node runs). After changing `src/`, `bin/` or `native/`, rebuild (`./dev wasm` for C changes, then `./dev build`) and commit `dist/` with the change.
+- **No platform code in the library.** Runtime pieces (opening a TCP socket, accepting a WebSocket upgrade) are parameters. The Cloudflare glue lives in `../server/cloudflare/`. `test/entries.test.ts` fails on `WebSocketPair`, `cloudflare:` or `cf-connecting-ip` anywhere in `src/` or `dist/`, and on Node built-ins or embedded WASM in the `wallet`, `payouts` and `bridge` entries, which must run on edge runtimes.
 
 ## Commands
 
@@ -33,8 +34,18 @@ Node 26 runs the `.ts` sources directly (type stripping): **erasable TypeScript 
 - **C is the source of truth for hashing and for stratum job → work construction** (per-algo quirks live in cpuminer-opt's gates and `stratum_notify`). The shim (`native/shim/`) compiles cpuminer-opt's algo tree plus ported pieces of `cpu-miner.c`/`util.c` (`ported.c`) and exports the `cmo_*` API (`cmo.c`; struct layout shared with `src/wasm/api.ts` via `cmo.h`).
 - `native/patches/patches.mjs` is the portability + bug-fix patch set, applied by `scripts/prepare-src.mjs` to a copy of the vendored tree in the cache volume (the vendored tree stays pristine). Each patch must match an exact number of times. Gate fields the shim calls through pointers have their `(void*)` casts stripped so signature mismatches fail at compile time (WASM traps on mismatched `call_indirect`).
 - TypeScript runtime (`src/`): `env/detect.ts` (capabilities) → `tune/autotune.ts` (measures candidate backends in a real worker) → `pool/` (worker pool; the same `ScanLoop` runs in workers or inline) → `miner.ts` (stratum client + main-thread work instance + pool + GPU loop). Backends register in `src/backends/registry.ts`; WASM kernels get a compiled `WebAssembly.Module` posted from the main thread (`backends/setup.ts`), so the worker bundle never contains the embedded WASM.
-- Stratum: `src/stratum/` (client + Node TCP/TLS and WebSocket transports). The bridge (`bridge/`): `core.ts` (allowlist, interceptor contract, in-order `LinePipe`), `server.ts` (Node, own RFC 6455 server or attached to an app's `node:http` server), `worker.ts` (Cloudflare Workers; `connect` and `WebSocketPair` are injected so it tests in Node), `auditor.ts` (`createShareAuditor`). `BRIDGE_FEATURES` advertises what the app (`../app/`) depends on.
-- Wallet and payouts: `src/wallet/` (keys, payments, chain clients) and `src/payouts/` (header rebuild, `verifyBlock`, the `verifyPayout` engine, store interfaces). The library holds **mechanisms only**: no env vars, keys, defaults for money policy, or storage of its own; the app passes them in. Exact-pinned `@scure`/`@noble` dependencies are bundled into `dist/` (shared chunk; `index.js` loads it lazily for `mineBTC`); any new runtime dependency needs the AUDIT.md treatment (`./dev audit`).
+- Stratum: `src/stratum/` (client + Node TCP/TLS and WebSocket transports). The bridge (`src/bridge/`):
+  - `core.ts`: the allowlist, `poolTarget`, the interceptor contract and the in-order `LinePipe`;
+  - `fetch.ts`: `createFetchBridge`, a web-standard `fetch(request)` handler, with the runtime's `connect` and `upgrade` passed in, so it tests in Node;
+  - `node.ts`: `createBridge`, its own RFC 6455 server, or attached to an app's `node:http` server; the CLI's `bridge`.
+  `BRIDGE_FEATURES` advertises what the server code (`../server/`) depends on.
+- Wallet and payouts: `src/wallet/` (keys, payments, chain clients) and `src/payouts/`:
+  - the header rebuild and `verifyBlock`;
+  - `auditor.ts`, `createShareAuditor`, the bridge interceptor that records shares;
+  - the `verifyPayout` engine and the store interfaces;
+  - `service.ts`, `createPayoutService`, which wires the auditor and the engine to one owner.
+  The library holds **mechanisms only**: no env vars, keys, defaults for money policy, or storage of its own; the server code passes them in. Exact-pinned `@scure`/`@noble` dependencies are bundled into `dist/` (shared chunk; `index.js` loads it lazily for `mineBTC`); any new runtime dependency needs the AUDIT.md treatment (`./dev audit`).
+- Entries, by where they run (README): `tau-crypto` (mining: browsers, Node, workers), `/wallet` (anywhere), `/payouts` and `/bridge` (servers and edge runtimes), `/bridge/node` (Node). There are no `'use client'` / `'use server'` directives: apps put them in their own files.
 
 ## Verification design (read before changing hashing code)
 

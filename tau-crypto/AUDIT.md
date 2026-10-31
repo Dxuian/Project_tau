@@ -50,7 +50,7 @@ seven are the current `latest` dist-tag; no newer versions exist.
    - free-global inventory and global/prototype writes;
    - AST classification of non-ASCII characters and long blobs;
    - the module graph reachable from the project's imports.
-5. Read the code paths `btc.js` uses, then ran known-answer tests (KATs) from upstream spec
+5. Read the code paths the wallet code uses, then ran known-answer tests (KATs) from upstream spec
    repos (not the libraries' own tests) and differential tests against OpenSSL (`node:crypto`).
    Tripwires on network, timer, eval and RNG globals stayed armed for the whole run.
 6. Collected README audit claims and checked the links that are on github.com.
@@ -158,7 +158,7 @@ Hits in runtime files (`.js`/`.json`/`.md`) and verdicts:
 
 | Category | Where | Verdict |
 |---|---|---|
-| network | btc-signer `net.js:152-154,318,322,340,343-345,348,357` | Benign. `EsploraProvider` calls a `fetch` the caller passes to its constructor; there is no hard-coded endpoint (only a `127.0.0.1` JSDoc example). The project doesn't import it (unreachable from `btc.js`, see below). |
+| network | btc-signer `net.js:152-154,318,322,340,343-345,348,357` | Benign. `EsploraProvider` calls a `fetch` the caller passes to its constructor; there is no hard-coded endpoint (only a `127.0.0.1` JSDoc example). The project doesn't import it (unreachable from the wallet code, see below). |
 | | bip39 `package.json:28-29` | Dev-only `fetch-wordlist` npm scripts, not lifecycle scripts. |
 | | bip39 `wordlists/english.js:684` | The BIP39 word "fetch". |
 | process | micro-packed `debugger.js:129` | `process.stdout.columns` for table width in the optional debugger module, which nothing imports. |
@@ -209,8 +209,9 @@ Dynamic check:
 
 ## 5. Code paths the project uses
 
-`btc.js` imports `generateMnemonic`, `mnemonicToSeedSync` and `validateMnemonic` with the english
-wordlist, `HDKey`, `@scure/btc-signer` (index) and `sha256`.
+The wallet code (`src/wallet/`; at the time of this review it was the top-level `btc.js`) imports
+`generateMnemonic`, `mnemonicToSeedSync` and `validateMnemonic` with the english wordlist,
+`HDKey`, `@scure/btc-signer` (index) and `sha256`.
 
 **@scure/bip39 (`index.js`)**
 - `generateMnemonic` (71-76): requires `strength % 32 === 0` and ≤ 256, then
@@ -310,7 +311,7 @@ trezor/trezor-firmware `95accc10`.
 | ECDSA vs OpenSSL (400 random) | Same pubkeys; signatures verify under OpenSSL; low-S, strict BIP66 DER, deterministic. |
 | Hashes vs OpenSSL | sha256, sha512, ripemd160, HMAC-SHA256/512 on 1,500 random inputs; PBKDF2-SHA512 ×40. |
 | Addresses | All BIP350 valid/invalid vectors behave as specified. Bitcoin Core `key_io`: 41 valid addresses decode/encode correctly and all invalid strings are rejected. Witness v2-16 addresses are rejected as unsupported. 5 Taproot vectors whose x-only key is off-curve (confirmed with OpenSSL) are rejected: stricter than BIP350, and it fails safe. |
-| End-to-end (`btc.js` payout sequence) | 2 inputs, 2 outputs. Re-verified independently: parse, txid, vsize, output scripts, fee, and each witness signature verified by OpenSSL against an independently computed BIP143 digest. |
+| End-to-end (the payout sequence, `buildPayment`) | 2 inputs, 2 outputs. Re-verified independently: parse, txid, vsize, output scripts, fee, and each witness signature verified by OpenSSL against an independently computed BIP143 digest. |
 
 ## 6. Published audits
 
@@ -330,8 +331,8 @@ trezor/trezor-firmware `95accc10`.
 | @scure/base | Self-audit, v2.2.0, Apr 2026; Cure53, v1.0.0, Jan 2022 | Same Cure53 PDF; links 200 |
 | micro-packed | None claimed; no `audit/` directory | It does btc-signer's transaction (de)serialization |
 
-UTXO selection: confirmed unaudited per the README. `btc.js` never calls `selectUTXO`; it does
-its own largest-first selection (`btc.js:666-684`). btc-signer's `index.js` still loads
+UTXO selection: confirmed unaudited per the README. The wallet code never calls `selectUTXO`; it
+does its own largest-first selection (`src/wallet/payment.ts:65-86`). btc-signer's `index.js` still loads
 `utxo.js` via re-export, but `transaction.js` doesn't import it, and nothing the project calls
 depends on it (`vsize` uses `transaction.js:28`).
 

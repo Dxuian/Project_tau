@@ -10,7 +10,9 @@ import { tmpdir } from 'node:os';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
-import { createWallet, loadConfig, startNodeServer } from '../btc.js';
+import { createWallet } from '../tau-crypto/dist/wallet.js';
+import { loadConfig } from '../server/config.js';
+import { startNodeServer } from '../server/node/index.js';
 import { startRegtestPool } from './regtest-pool.js';
 import { nodeReady, regtest, regtestChainEnv, until } from './helpers.js';
 

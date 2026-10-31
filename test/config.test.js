@@ -1,7 +1,11 @@
 // loadConfig(): every setting is a parameter, and bad settings fail clearly.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createPayoutService, createWallet, loadConfig, memoryStores, poolTarget } from '../btc.js';
+import { poolTarget } from '../tau-crypto/dist/bridge.js';
+import { memoryStores } from '../tau-crypto/dist/payouts.js';
+import { createWallet } from '../tau-crypto/dist/wallet.js';
+import { createPayoutApi } from '../server/api.js';
+import { loadConfig } from '../server/config.js';
 import { OWNER, OWNER_WORDS } from './helpers.js';
 
 test('defaults, and overrides from the environment', () => {
@@ -45,24 +49,32 @@ test('rejects unusable settings', () => {
 test("refuses an OWNER_MNEMONIC that isn't the owner address's wallet", () => {
   const config = loadConfig({ TAU_OWNER_ADDRESS: OWNER });
   const { shares, ledger } = memoryStores();
-  assert.throws(() => createPayoutService(config, { shares, ledger, chain: {}, ownerMnemonic: createWallet().mnemonic }), /not the wallet/);
-  assert.ok(createPayoutService(config, { shares, ledger, chain: {}, ownerMnemonic: OWNER_WORDS }));
+  assert.throws(
+    () => createPayoutApi(config, { shares, ledger, chain: {}, ownerMnemonic: createWallet().mnemonic }),
+    /OWNER_MNEMONIC is not the wallet of TAU_OWNER_ADDRESS/,
+  );
+  assert.equal(createPayoutApi(config, { shares, ledger, chain: {}, ownerMnemonic: OWNER_WORDS }).service.canPay, true);
 });
 
-test('the payout API: health, validation, CORS, and no key means no payouts', async () => {
+test('the payout API (fetch): health, validation, CORS, body limit, and no key means no payouts', async () => {
   const config = loadConfig({ TAU_OWNER_ADDRESS: OWNER, TAU_ORIGINS: 'https://site.example' });
   const { shares, ledger } = memoryStores();
-  const recordOnly = createPayoutService(config, { shares, ledger, chain: {} });
-  const health = await recordOnly.handleHttp({ method: 'GET', path: '/health' });
-  assert.equal(JSON.parse(health.body).canPay, false);
+  const recordOnly = createPayoutApi(config, { shares, ledger, chain: {} });
+  const call = (method, path, { origin, body } = {}) =>
+    recordOnly.fetch(new Request(`http://api.test${path}`, { method, headers: origin ? { origin } : {}, body }));
+  const health = await call('GET', '/health');
+  assert.equal((await health.json()).canPay, false);
   const visitor = createWallet().address;
-  const r = await recordOnly.handleHttp({ method: 'POST', path: '/payout', origin: 'https://site.example', body: JSON.stringify({ address: visitor }) });
+  const r = await call('POST', '/payout', { origin: 'https://site.example', body: JSON.stringify({ address: visitor }) });
   assert.equal(r.status, 503);
-  assert.equal(r.headers['access-control-allow-origin'], 'https://site.example');
-  const evil = await recordOnly.handleHttp({ method: 'POST', path: '/payout', origin: 'https://evil.example', body: '{}' });
+  assert.equal(r.headers.get('access-control-allow-origin'), 'https://site.example');
+  const evil = await call('POST', '/payout', { origin: 'https://evil.example', body: '{}' });
   assert.equal(evil.status, 400);
-  assert.equal(evil.headers['access-control-allow-origin'], undefined);
-  assert.equal((await recordOnly.handleHttp({ method: 'POST', path: '/payout', body: 'not json' })).status, 400);
-  assert.equal((await recordOnly.handleHttp({ method: 'GET', path: '/nope' })).status, 404);
-  assert.equal((await recordOnly.handleHttp({ method: 'OPTIONS', path: '/payout', origin: 'https://site.example' })).status, 204);
+  assert.equal(evil.headers.get('access-control-allow-origin'), null);
+  assert.equal((await call('POST', '/payout', { body: 'not json' })).status, 400);
+  assert.equal((await call('POST', '/payout', { body: JSON.stringify({ address: visitor, pad: 'x'.repeat(5000) }) })).status, 413);
+  assert.equal((await call('GET', '/nope')).status, 404);
+  const preflight = await call('OPTIONS', '/payout', { origin: 'https://site.example' });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('access-control-allow-methods'), 'POST, GET');
 });

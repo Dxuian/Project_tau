@@ -1,25 +1,65 @@
 # tau-crypto
 
-[cpuminer-opt](https://github.com/JayDDee/cpuminer-opt) v26.1, compiled to WebAssembly,
-with a self-contained JavaScript runtime that mines in **Node.js, browsers and workers**.
+A crypto library for Bitcoin mining sites: mining, wallets, payments, payout proofs and
+the bridge browsers mine through. Every value is a parameter, and the library stores no
+keys or state of its own.
 
-- **All 91 cpuminer-opt algorithms**, from cpuminer-opt's own C code: sha256d, scrypt,
-  x11..x25x, lyra2, yespower, argon2d, verthash, m7m and the rest (90 run; `bmw` was
-  never registered upstream).
-- **Auto-detects the best way to hash on the machine it's running on.** It checks what
-  the environment supports (WASM SIMD, workers, WebGPU, Node's native crypto, cores,
-  memory), then *measures* each candidate backend and picks the fastest plus a thread
-  count that fits in memory.
+- **Mining**: [cpuminer-opt](https://github.com/JayDDee/cpuminer-opt) v26.1, compiled to
+  WebAssembly, with a self-contained runtime that mines in **browsers, Node.js and
+  workers**.
+  - **All 91 cpuminer-opt algorithms**, from cpuminer-opt's own C code: sha256d,
+    scrypt, x11..x25x, lyra2, yespower, argon2d, verthash, m7m and the rest (90 run;
+    `bmw` was never registered upstream).
+  - **It finds the fastest way to hash on each machine.** It checks what the environment
+    supports (WASM SIMD, workers, WebGPU, Node's native crypto, cores, memory), then
+    *measures* each candidate backend. It picks the fastest, with a thread count that
+    fits in memory.
+- **Wallets and payments**: BIP39/BIP84 wallets and new addresses (offline), sending
+  BTC, and chain clients.
+- **Payout proofs**:
+  - record the shares visitors mine through the bridge;
+  - prove that a share is a block in the best chain;
+  - pay the visitor who found it a share of the reward, once.
+- **Bridges**: browsers can't open TCP connections, so a bridge relays WebSocket to the
+  pool's TCP. There are two:
+  - a web-standard `fetch(request)` handler, for any runtime that accepts WebSocket
+    upgrades and opens TCP sockets (Cloudflare Workers or Pages, for example);
+  - a Node server.
+
+  The runtime's own pieces are passed in, so the library holds no platform code.
 - **Self-contained**: no native addons, nothing to install, no separate `.wasm` or worker
-  files to host. The WASM is embedded (and only the variants you use are loaded); the
-  wallet code's dependencies (Paul Miller's audited `@scure`/`@noble` libraries, exact
-  versions reviewed in [AUDIT.md](AUDIT.md)) are bundled into `dist/`.
-- **Wallets, payout verification and the bridge** as separate entries (below), for sites
-  that share block rewards with the visitors who mine.
+  files to host.
+  - The WASM is embedded, and only the variants you use are loaded.
+  - The wallet code's dependencies, Paul Miller's audited `@scure`/`@noble` libraries,
+    are bundled into `dist/`. The exact versions are reviewed in [AUDIT.md](AUDIT.md).
 
 > **Nothing mines until you call `start()`.** Mining keeps the CPU (and GPU) busy and
 > uses power. Only mine on devices you own or whose owner has explicitly agreed —
 > running a miner in other people's browsers without consent is cryptojacking.
+
+## Entries, and where each runs
+
+| import | what | runs in |
+|---|---|---|
+| `tau-crypto` | mining: `createMiner`, `mineBTC`, `detect`, `benchmark`, `hash` | browsers, Node, workers |
+| `tau-crypto/wallet` | wallets, new addresses, payments, chain clients | anywhere |
+| `tau-crypto/payouts` | `createPayoutService`, the share auditor, block proofs, the payout engine | servers: Node, Workers/Pages, Next.js server code |
+| `tau-crypto/bridge` | `createFetchBridge`, `poolTarget`, the interceptor contract | servers that accept WebSocket upgrades and open TCP sockets |
+| `tau-crypto/bridge/node` | `createBridge`, and the CLI's `tau-crypto bridge` | Node |
+
+In a **Next.js or Cloudflare Pages** app:
+- **Client components (`'use client'`)** import `tau-crypto` and `tau-crypto/wallet`.
+  Wallets are created, and addresses derived, in the browser, so the visitor's words
+  never leave it.
+- **Server code** imports `tau-crypto/payouts` and `tau-crypto/bridge`. That covers
+  `'use server'` actions, route handlers, Pages Functions and Workers, and it is the only
+  place the owner's words are used.
+- **Directives go in your files.** The library has no `'use client'` or `'use server'`
+  directives of its own.
+- **The server entries bundle for edge runtimes.** `wallet`, `payouts` and `bridge` load
+  no Node built-ins and no WASM, which `test/entries.test.ts` checks.
+- **Keep `tau-crypto` (the miner) out of server code.** It carries the WASM, and mining
+  belongs in the visitor's browser after they agree, never during server rendering.
 
 ## How it works
 
@@ -103,7 +143,8 @@ tau-crypto --list-algos
 
 ### Browser
 
-Browsers can't open TCP connections, so pool traffic goes through a bridge you run:
+Browsers can't open TCP connections, so pool traffic goes through a bridge you run. That
+can be the Node one, or `createFetchBridge` on a server or edge runtime (below):
 
 ```sh
 tau-crypto bridge --listen 8080 --allow solo.ckpool.org:3333 [--origin https://your.site]
@@ -126,22 +167,59 @@ open proxy. In browsers the miner pauses while the page is hidden (`pauseWhenHid
 `mineBTC(address, url)` is a shortcut: sha256d for `address`, through a bridge (`ws://`,
 `wss://`) or straight to a pool (`stratum+tcp://`, Node).
 
-## Wallets, payouts and the bridge
+## Wallets, payouts and the bridges
 
-Mechanisms only: every value (who gets paid, what share, where records live) is a
-parameter, and nothing stores keys or state of its own. `../btc.js` and `../app/` show one
-application built on them.
+These are mechanisms only. Every value is a parameter: who gets paid, what share, where
+records live and which runtime. The library stores no keys or state. `../server/` is one
+application built on them, with a Node server and a Cloudflare Worker.
 
-| entry | what |
-|---|---|
-| `tau-crypto/wallet` | `createWallet()` (BIP39 words + BIP84 `bc1q…` address, offline), `newAddress(wallet, { index? })` (the wallet's next receive address, `m/84'/0'/0'/0/<index>`, returned as the wallet at that address), `walletFromMnemonic`, `isValidAddress`, `addressScript`; `payout(to, sats, { mnemonic, chain })` / `buildPayment` (spends from the first address; largest-first coin selection, upper-bound fee, change, signing); chain clients `esplora(url)` (mempool.space) and `bitcoinCore({ url, user, pass })` |
-| `tau-crypto/payouts` | `rebuildBlockHeader(share)` (header from stratum fields, block or not), `verifyBlock(block, { chain, payToScript })` (best chain, confirmations, coinbase, payee), and the engine `verifyPayout(address, { shares, ledger, chain, ownerMnemonic, sharePercent })`: pays a visitor `sharePercent` of each block they provably found, once; `payoutAll`; the `ShareStore` / `PayoutLedger` interfaces and `memoryStores()` |
-| `tau-crypto/bridge` | `createBridge` (Node; or attached to your own `node:http` server with `server`), `createWorkerBridge` (Cloudflare Workers: pass `connect` from `cloudflare:sockets`), and `createShareAuditor({ poolUser, onShare })`, the interceptor that logs every connection in to the pool as `poolUser` and records each share before forwarding it |
+**`tau-crypto/wallet`**
+- `createWallet()`: BIP39 words and a BIP84 `bc1q…` address, offline.
+- `newAddress(wallet, { index? })`: the wallet's next receive address,
+  `m/84'/0'/0'/0/<index>`, returned as the wallet at that address.
+- `walletFromMnemonic`, `isValidAddress`, `addressScript`.
+- `payout(to, sats, { mnemonic, chain })` / `buildPayment`. These spend from the first
+  address, with largest-first coin selection, an upper-bound fee, change and signing.
+- Chain clients `esplora(url)` (mempool.space) and `bitcoinCore({ url, user, pass })`.
 
-Bridge interceptors (`intercept`) see, rewrite or drop every stratum line, may be async
-(lines stay in order per direction) and can reply to the client; `BRIDGE_FEATURES` lists
-what a build supports. The `PayoutLedger.reserve()` contract is what makes "once" hold
-across processes: it must atomically claim the block and the coins a payment spends.
+**`tau-crypto/payouts`**
+- `createPayoutService({ ownerAddress, ownerMnemonic?, sharePercent, network?, shares, ledger, chain?, … })`
+  returns `{ intercept, verifyPayout(address), payoutAll(), canPay }`.
+  - It wires the share auditor and the payout engine to one owner. Visitors are logged
+    in to the pool as `ownerAddress`, and the words must belong to that address (its
+    first one).
+  - Without the words, it records shares but can't pay.
+- The parts, for your own wiring:
+  - `createShareAuditor({ poolUser, onShare })`, the interceptor that logs every
+    connection in as `poolUser` and records each share before forwarding it;
+  - `verifyPayout(address, { shares, ledger, chain, ownerMnemonic, sharePercent })`,
+    which pays a visitor `sharePercent` of each block they provably found, once, and
+    `payoutAll`;
+  - `rebuildBlockHeader` and `verifyBlock`;
+  - the `ShareStore` / `PayoutLedger` interfaces, and `memoryStores()`.
+
+**`tau-crypto/bridge`**
+- `createFetchBridge({ allow, origins?, intercept?, connect, upgrade, peer? })` returns
+  `{ fetch(request) }`. The runtime supplies two pieces:
+  ```js
+  connect: ({ host, port, tls }) => socket,   // the pool connection: { readable, writable, opened, close() }
+  upgrade: (request) => ({ socket, response }), // the accepted server WebSocket, and the 101 response to return
+  ```
+  `../server/cloudflare/worker.js` provides both for Cloudflare Workers: `connect()` from
+  `cloudflare:sockets`, and a `WebSocketPair`.
+- `poolTarget(url)` turns a pool URL into its `allow` entry.
+
+**`tau-crypto/bridge/node`**
+- `createBridge({ allow, port | server, … })` is the same bridge as a Node server, with
+  its own RFC 6455 implementation. It runs standalone or attached to your `node:http`
+  server.
+- On the command line it's `tau-crypto bridge`.
+
+Bridge interceptors (`intercept`) see, rewrite or drop every stratum line, and can
+reply to the client. They may be async; lines stay in order per direction.
+`BRIDGE_FEATURES` lists what a build supports. The `PayoutLedger.reserve()` contract is
+what makes "once" hold across processes: it must atomically claim the block and the
+coins a payment spends.
 
 ## Verification
 
@@ -171,7 +249,7 @@ Upstream bugs found and fixed in the process (all in `native/patches/patches.mjs
 Separately, upstream's own ARM builds produce wrong sha256t and scryptn2 hashes
 (confirmed against independent references); this port follows the x86 paths.
 
-Test suite: 468 Node tests (278 of them golden: 92 cases × 3 variants + reference checks)
+Test suite: 480 Node tests (278 of them golden: 92 cases × 3 variants + reference checks)
 and 18 headless-Chromium tests, including mining Bitcoin block 1 from a browser page
 through the bridge to a mock pool, and the WebGPU kernel on SwiftShader.
 

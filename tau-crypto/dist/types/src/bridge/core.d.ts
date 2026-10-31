@@ -53,6 +53,8 @@ export declare function parseTarget(text: string | null | undefined): {
     host: string;
     port: number;
 } | null;
+/** host:port of a pool URL (stratum+tcp://host:port), as an `allow` entry. */
+export declare function poolTarget(url: string): string;
 export type Allowlist = Map<string, {
     host: string;
     port: number;

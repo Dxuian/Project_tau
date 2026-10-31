@@ -29,6 +29,8 @@ export interface PayoutResult {
     feeSats?: bigint;
     error?: string;
 }
+/** `value` as a bigint percent; throws unless it is a whole number from 1 to 100. */
+export declare function checkSharePercent(value: number | bigint): bigint;
 /**
  * Pays `address` its share of each block it found, at most once per block.
  * Every block is rebuilt from the recorded raw share fields (never from a stored

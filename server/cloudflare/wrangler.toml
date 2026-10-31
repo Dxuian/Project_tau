@@ -1,7 +1,7 @@
-# Cloudflare target (worker.js). Deploy with your own account:
-#   npx wrangler d1 create tau-payouts          -> put the id below
-#   npx wrangler secret put OWNER_MNEMONIC      -> the owner wallet's words (never in this file)
-#   npx wrangler deploy
+# Cloudflare target (worker.js). Deploy with your own account, from the repo root:
+#   npx wrangler d1 create tau-payouts -c server/cloudflare/wrangler.toml       -> put the id below
+#   npx wrangler secret put OWNER_MNEMONIC -c server/cloudflare/wrangler.toml   -> the owner wallet's words (never in this file)
+#   npx wrangler deploy -c server/cloudflare/wrangler.toml
 # Browsers then mine with mineBTC(address, 'wss://<your-worker>.workers.dev').
 name = "tau-payout"
 main = "worker.js"

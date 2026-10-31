@@ -1,14 +1,13 @@
-// Shared by the Node bridge (server.ts) and the Cloudflare Workers bridge
-// (worker.ts): the allowlist, the interceptor contract and in-order line
-// processing.
-import { MAX_LINE_BYTES, formatHostPort } from '../src/stratum/client.ts';
+// Shared by the Node bridge (node.ts) and the fetch bridge (fetch.ts): the
+// allowlist, the interceptor contract and in-order line processing.
+import { MAX_LINE_BYTES, formatHostPort, parseStratumUrl } from '../stratum/client.ts';
 
 export const MAX_MESSAGE_BYTES = MAX_LINE_BYTES;
 /** Lines queued behind a slow (async) interceptor before the connection is failed. */
 export const MAX_PENDING_LINES = 1000;
 
 /** Optional capabilities of this bridge, for callers that depend on them. */
-export const BRIDGE_FEATURES: readonly string[] = Object.freeze(['intercept', 'async-intercept', 'worker']);
+export const BRIDGE_FEATURES: readonly string[] = Object.freeze(['intercept', 'async-intercept', 'fetch']);
 
 /** One WebSocket connection, as seen by an interceptor. */
 export interface BridgeConnection {
@@ -64,6 +63,12 @@ export function parseTarget(text: string | null | undefined): { host: string; po
   const m = /^\[([0-9a-f:.]+)\]:(\d{1,5})$/i.exec(value) ?? /^([a-z0-9._-]+):(\d{1,5})$/i.exec(value);
   const port = m ? Number(m[2]) : 0;
   return m && port >= 1 && port <= 65535 ? { host: m[1].toLowerCase(), port } : null;
+}
+
+/** host:port of a pool URL (stratum+tcp://host:port), as an `allow` entry. */
+export function poolTarget(url: string): string {
+  const { host, port } = parseStratumUrl(url);
+  return formatHostPort(host.toLowerCase(), port);
 }
 
 export type Allowlist = Map<string, { host: string; port: number }>;

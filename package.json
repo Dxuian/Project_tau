@@ -3,13 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Payout service for browser Bitcoin mining on tau-crypto: config, storage and deployment (Node or Cloudflare Workers)",
-  "exports": {
-    ".": "./btc.js"
-  },
+  "description": "Server-side code for browser Bitcoin mining on tau-crypto: config, payout API, storage and deployment (Node or Cloudflare Workers)",
   "scripts": {
-    "test": "node --test --test-concurrency=1 test/*.test.js",
-    "worker:bundle": "wrangler deploy --dry-run --outdir .wrangler/bundle"
+    "test": "node --test --test-concurrency=1 test/*.test.js"
   },
   "devDependencies": {
     "miniflare": "4.20260730.0",

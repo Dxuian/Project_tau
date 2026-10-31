@@ -1,6 +1,8 @@
 // Shared test helpers: a mock chain, an easy synthetic block, regtest access.
 import { createHash } from 'node:crypto';
-import { addressScript, bitcoinCore, mineBTC, rebuildBlockHeader } from '../btc.js';
+import { mineBTC } from '../tau-crypto/dist/index.js';
+import { rebuildBlockHeader } from '../tau-crypto/dist/payouts.js';
+import { addressScript, bitcoinCore } from '../tau-crypto/dist/wallet.js';
 
 export const OWNER_WORDS = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 export const OWNER = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';

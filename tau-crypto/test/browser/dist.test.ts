@@ -5,7 +5,7 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { chromium, type Browser, type Page } from 'playwright-core';
-import { createBridge, type Bridge } from '../../bridge/server.ts';
+import { createBridge, type Bridge } from '../../src/bridge/node.ts';
 import { MockPool } from '../mock-pool.ts';
 import { BLOCK1, GENESIS_HASH, GENESIS_WORDS, headerBytes, ROOT } from '../helpers.ts';
 import { serve, type StaticServer } from './server.ts';

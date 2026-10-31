@@ -1,8 +1,8 @@
-// WebSocket <-> TCP bridge that lets browsers reach stratum pools. Each WebSocket
+// tau-crypto/bridge/node: the WebSocket <-> TCP bridge on Node. Each WebSocket
 // opens one TCP (or TLS) connection to an allowlisted pool, never anywhere else;
 // one text message is one stratum line. A minimal RFC 6455 server on node:http.
-import { nodeBuiltin } from '../src/env/detect.ts';
-import { LineDecoder, MAX_LINE_BYTES, formatHostPort } from '../src/stratum/client.ts';
+import { nodeBuiltin } from '../env/detect.ts';
+import { LineDecoder, MAX_LINE_BYTES, formatHostPort } from '../stratum/client.ts';
 import {
   LinePipe,
   MAX_MESSAGE_BYTES,
@@ -14,8 +14,8 @@ import {
   type BridgeInterceptor,
 } from './core.ts';
 
-export { BRIDGE_FEATURES } from './core.ts';
-export type { BridgeConnection, BridgeInterceptor } from './core.ts';
+export { BRIDGE_FEATURES, poolTarget } from './core.ts';
+export type { BridgeBaseOptions, BridgeConnection, BridgeInterceptor } from './core.ts';
 
 export interface BridgeOptions extends BridgeBaseOptions {
   /** Port to listen on; 0 picks a free one. Not used with `server`. */
@@ -24,6 +24,8 @@ export interface BridgeOptions extends BridgeBaseOptions {
   host?: string;
   /** Accept any certificate from pools reached with tls=1. Default false. */
   tlsInsecure?: boolean;
+  /** How long a pool may take to accept the connection. Default 30 s. */
+  connectTimeoutMs?: number;
   /**
    * An existing node:http (or https) server to handle WebSocket upgrades on,
    * instead of listening on `port`: the app keeps its own routes on it.
@@ -377,7 +379,7 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
       poolError ??= err;
     });
     // Answer the upgrade only once the pool is reachable, so the WebSocket opens iff the pool did.
-    const timer = setTimeout(() => pool.destroy(new Error('timed out')), CONNECT_TIMEOUT_MS);
+    const timer = setTimeout(() => pool.destroy(new Error('timed out')), options.connectTimeoutMs ?? CONNECT_TIMEOUT_MS);
     const ready = useTls ? 'secureConnect' : 'connect';
     const onReady = () => {
       cleanup();

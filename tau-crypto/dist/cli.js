@@ -3,10 +3,11 @@ import {
   benchmark,
   createMiner,
   listAlgorithms
-} from "./chunks/chunk-7LOKGIHE.js";
+} from "./chunks/chunk-UJPX5J72.js";
 import {
   detect
-} from "./chunks/chunk-54VWD4RY.js";
+} from "./chunks/chunk-DMFZA2GS.js";
+import "./chunks/chunk-TOFRYWU7.js";
 
 // bin/cli.ts
 var VERSION = "0.1.0";
@@ -81,7 +82,7 @@ function formatHps(h) {
 async function main() {
   const argv = process.argv.slice(2);
   if (argv[0] === "bridge") {
-    const { runBridgeCli } = await import("./chunks/server-RA43WJPM.js");
+    const { runBridgeCli } = await import("./bridge/node.js");
     await runBridgeCli(argv.slice(1));
     return;
   }

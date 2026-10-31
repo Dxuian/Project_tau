@@ -12,7 +12,7 @@ import {
   type Bridge,
   type BridgeConnection,
   type BridgeOptions,
-} from '../bridge/server.ts';
+} from '../src/bridge/node.ts';
 import { createStratumClient } from '../src/stratum/index.ts';
 import type { StratumClient } from '../src/types.ts';
 

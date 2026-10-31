@@ -1,11 +1,12 @@
-// The Cloudflare Workers bridge (bridge/worker.ts) with the Workers runtime
-// pieces faked: WebSocketPair in memory, connect() over node:net to the mock pool.
+// The fetch bridge (src/bridge/fetch.ts) with the runtime's pieces supplied by
+// the test: upgrade() gives an in-memory WebSocket pair, connect() goes over
+// node:net to the mock pool.
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect as netConnect } from 'node:net';
 import { Readable, Writable } from 'node:stream';
 import { EXAMPLE_JOB, MockPool } from './mock-pool.ts';
-import { createWorkerBridge, type WorkerBridgeOptions, type WorkerSocket } from '../bridge/worker.ts';
+import { createFetchBridge, type FetchBridgeOptions, type PoolSocket } from '../src/bridge/fetch.ts';
 import { createStratumClient } from '../src/stratum/index.ts';
 import { wsTransport } from '../src/stratum/transport-ws.ts';
 
@@ -18,7 +19,7 @@ async function until(condition: () => boolean, ms = 3000): Promise<void> {
   }
 }
 
-/** One end of an in-memory WebSocketPair (Workers API on the server end, browser-style handlers too). */
+/** One end of an in-memory WebSocket pair (server-style listeners, browser-style handlers too). */
 class FakeEnd {
   peer!: FakeEnd;
   closed = false;
@@ -66,9 +67,9 @@ class FakePair {
   }
 }
 
-/** Workers' connect() over node:net. */
-function tcpConnect({ hostname, port }: { hostname: string; port: number }): WorkerSocket {
-  const sock = netConnect({ host: hostname, port });
+/** A pool connection over node:net, as web streams. */
+function tcpConnect({ host, port }: { host: string; port: number }): PoolSocket {
+  const sock = netConnect({ host, port });
   sock.on('error', () => {});
   const opened = new Promise((resolve, reject) => {
     sock.once('connect', () => resolve({}));
@@ -84,7 +85,7 @@ function tcpConnect({ hostname, port }: { hostname: string; port: number }): Wor
 
 type Handler = { fetch(request: Request): Promise<Response> };
 
-/** A browser-style WebSocket class whose connections go to the Worker's fetch handler. */
+/** A browser-style WebSocket class whose connections go to the bridge's fetch handler. */
 function webSocketFor(worker: Handler, headers: Record<string, string> = {}) {
   return class {
     binaryType = 'blob';
@@ -111,15 +112,20 @@ function webSocketFor(worker: Handler, headers: Record<string, string> = {}) {
   };
 }
 
-async function setup(t: TestContext, options: Partial<WorkerBridgeOptions> = {}) {
+/** upgrade(): the server end of a fresh pair, and a 101 carrying the client end (Node's Response refuses 101). */
+function pairUpgrade() {
+  const pair = new FakePair();
+  return { socket: pair[1], response: { status: 101, webSocket: pair[0] } as unknown as Response };
+}
+
+async function setup(t: TestContext, options: Partial<FetchBridgeOptions> = {}) {
   const pool = await MockPool.start();
   t.after(() => pool.close());
   const logs: string[] = [];
-  const worker = createWorkerBridge({
+  const worker = createFetchBridge({
     allow: [pool.target],
     connect: tcpConnect,
-    WebSocketPair: FakePair as never,
-    upgradeResponse: (client) => ({ status: 101, webSocket: client }) as unknown as Response,
+    upgrade: pairUpgrade,
     log: (l) => logs.push(l),
     ...options,
   });
@@ -130,7 +136,7 @@ const upgrade = (worker: Handler, path: string, headers: Record<string, string> 
   worker.fetch(new Request(`http://worker.test${path}`, { headers: { upgrade: 'websocket', ...headers } }));
 const targetPath = (target: string, tls = 0) => `/?target=${encodeURIComponent(target)}&tls=${tls}`;
 
-test('a stratum client reaches the pool through the Worker bridge', async (t) => {
+test('a stratum client reaches the pool through the fetch bridge', async (t) => {
   const { pool, worker, logs } = await setup(t);
   const client = createStratumClient({
     url: pool.url,
@@ -238,4 +244,48 @@ test('closing either side closes the other; a throwing interceptor closes with 1
   await until(() => b.webSocket.closed);
   assert.equal(b.webSocket.closeEvent.code, 1011);
   assert.equal(pool.messages('bad').length, 0);
+});
+
+test('upgrades only once the pool is open; a failing upgrade answers 500 and drops the pool connection', async (t) => {
+  let opened = false;
+  let upgradedAfterOpen: boolean | null = null;
+  const { pool, worker } = await setup(t, {
+    connect: (target) => {
+      const socket = tcpConnect(target);
+      socket.opened.then(() => (opened = true), () => {});
+      return socket;
+    },
+    upgrade: () => {
+      upgradedAfterOpen = opened;
+      throw new Error('no upgrade here');
+    },
+  });
+  const res = await upgrade(worker, targetPath(pool.target));
+  assert.equal(res.status, 500);
+  assert.equal(upgradedAfterOpen, true);
+  await until(() => pool.connections.length === 1 && pool.connections[0].isClosed);
+});
+
+test('peer() names the client for the interceptor and the logs', async (t) => {
+  const peers: string[] = [];
+  const { pool, worker, logs } = await setup(t, {
+    peer: (request) => request.headers.get('x-client-ip'),
+    intercept: (c) => {
+      peers.push(c.peer);
+      return {};
+    },
+  });
+  const a: any = await upgrade(worker, targetPath(pool.target), { 'x-client-ip': '203.0.113.7' });
+  const b: any = await upgrade(worker, targetPath(pool.target));
+  assert.deepEqual(peers, ['203.0.113.7', 'unknown']);
+  assert.ok(logs.some((l) => l.startsWith('203.0.113.7 connected to')));
+  a.webSocket.close(1000);
+  b.webSocket.close(1000);
+});
+
+test('needs connect and upgrade, and a valid allowlist', () => {
+  const allow = ['pool.example:3333'];
+  assert.throws(() => createFetchBridge({ allow, upgrade: pairUpgrade } as unknown as FetchBridgeOptions), /connect/);
+  assert.throws(() => createFetchBridge({ allow, connect: tcpConnect } as unknown as FetchBridgeOptions), /upgrade/);
+  assert.throws(() => createFetchBridge({ allow: [], connect: tcpConnect, upgrade: pairUpgrade }), /at least one allowed pool/);
 });

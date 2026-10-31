@@ -18,8 +18,12 @@
       "default": "./dist/payouts.js"
     },
     "./bridge": {
-      "types": "./dist/types/bridge/index.d.ts",
+      "types": "./dist/types/src/bridge/index.d.ts",
       "default": "./dist/bridge.js"
+    },
+    "./bridge/node": {
+      "types": "./dist/types/src/bridge/node.d.ts",
+      "default": "./dist/bridge/node.js"
     }
   },
   "bin": {

@@ -2,7 +2,7 @@
 // mature block exactly once, and nothing else. In-memory stores + mock chain.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createShareAuditor } from '../bridge/auditor.ts';
+import { createShareAuditor } from '../src/payouts/auditor.ts';
 import { memoryStores, payoutAll, rebuildBlockHeader, verifyPayout, type PayoutOptions, type ShareRecord } from '../src/payouts/index.ts';
 import { addressScript, createWallet, walletFromMnemonic } from '../src/wallet/index.ts';
 import { mockChain, outputsOf, type MockChain } from './mock-chain.ts';

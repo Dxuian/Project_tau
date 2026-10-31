@@ -1,10 +1,10 @@
 // Your payout service's settings. Every value the library needs is a parameter
 // here, read from environment variables (Node) or Worker vars (Cloudflare).
 // The only secret, OWNER_MNEMONIC, is read separately by the entry points.
-import { isValidAddress } from '../tau-crypto/dist/wallet.js';
+import { bitcoinCore, esplora, isValidAddress } from '../tau-crypto/dist/wallet.js';
 
 export const DEFAULTS = Object.freeze({
-  /** Where the bridge and payout service run: 'node' (server.js) or 'cloudflare' (worker.js). */
+  /** Where the bridge and payout service run: 'node' (node/server.js) or 'cloudflare' (cloudflare/worker.js). */
   target: 'node',
   network: 'mainnet',
   pool: 'stratum+tcp://solo.ckpool.org:3333',
@@ -88,4 +88,9 @@ export function validateConfig(c) {
   if (c.target === 'cloudflare' && c.storage.type !== 'd1') throw new Error('the cloudflare target stores records in D1 (TAU_STORAGE=d1)');
   if (c.target === 'node' && c.storage.type === 'd1') throw new Error('D1 storage is for the cloudflare target');
   return c;
+}
+
+/** The chain client for config.chain. */
+export function chainFromConfig(chain) {
+  return chain.type === 'bitcoin-core' ? bitcoinCore({ url: chain.url, user: chain.user, pass: chain.pass }) : esplora(chain.url);
 }

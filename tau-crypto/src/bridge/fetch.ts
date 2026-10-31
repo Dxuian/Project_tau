@@ -1,8 +1,10 @@
-// The bridge as a Cloudflare Worker: the same allowlist, origin check and
-// interceptor contract as the Node bridge, on Workers' WebSocketPair and TCP
-// sockets. `connect` (from 'cloudflare:sockets') is passed in, so this module
-// runs and tests anywhere.
-import { LineDecoder, MAX_LINE_BYTES, formatHostPort } from '../src/stratum/client.ts';
+// The bridge as a web-standard `fetch(request)` handler, for runtimes that hand
+// WebSocket upgrades to the server as Requests and open TCP sockets as web
+// streams. The runtime's own pieces are parameters (`connect` opens the pool
+// connection, `upgrade` accepts the WebSocket), so this module holds no
+// platform code and runs and tests anywhere. Same allowlist, origin check and
+// interceptor contract as the Node bridge.
+import { LineDecoder, MAX_LINE_BYTES, formatHostPort } from '../stratum/client.ts';
 import {
   LinePipe,
   MAX_MESSAGE_BYTES,
@@ -13,35 +15,33 @@ import {
   type BridgeInterceptor,
 } from './core.ts';
 
-/** The parts of a Workers TCP socket the bridge uses. */
-export interface WorkerSocket {
+/** A TCP (or TLS) connection to a pool as web streams; `opened` settles once it is up. */
+export interface PoolSocket {
   readable: ReadableStream<Uint8Array>;
   writable: WritableStream<Uint8Array>;
   opened: Promise<unknown>;
   close(): unknown;
 }
 
-export type WorkerConnect = (
-  address: { hostname: string; port: number },
-  options?: { secureTransport?: 'off' | 'on'; allowHalfOpen?: boolean },
-) => WorkerSocket;
-
-/** The parts of a Workers (server-side) WebSocket the bridge uses. */
-export interface WorkerWebSocket {
-  accept(): void;
+/** The server end of an accepted WebSocket. */
+export interface ServerWebSocket {
   send(data: string): void;
   close(code?: number, reason?: string): void;
   addEventListener(type: 'message' | 'close' | 'error', listener: (event: any) => void): void;
 }
 
-export interface WorkerBridgeOptions extends BridgeBaseOptions {
-  /** `connect` from 'cloudflare:sockets'. */
-  connect: WorkerConnect;
-  /** Default: the Workers global WebSocketPair. */
-  WebSocketPair?: new () => { 0: WorkerWebSocket; 1: WorkerWebSocket };
-  /** Builds the 101 response; default `new Response(null, { status: 101, webSocket: client })`. */
-  upgradeResponse?: (client: WorkerWebSocket) => Response;
-  /** Default 30 s. */
+export interface FetchBridgeOptions extends BridgeBaseOptions {
+  /** Opens the connection to an allowed pool; `tls` is the client's tls=1. */
+  connect(target: { host: string; port: number; tls: boolean }): PoolSocket;
+  /**
+   * Accepts the WebSocket upgrade of `request`: the server end, ready to send
+   * and receive, and the response that completes the upgrade. Called only once
+   * the pool connection is open.
+   */
+  upgrade(request: Request): { socket: ServerWebSocket; response: Response };
+  /** The client's address, for logs and the interceptor. Default 'unknown'. */
+  peer?(request: Request): string | null | undefined;
+  /** How long a pool may take to accept the connection. Default 30 s. */
   connectTimeoutMs?: number;
 }
 
@@ -63,9 +63,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 /** A `fetch(request)` handler that bridges WebSocket clients to allowlisted pools. */
-export function createWorkerBridge(options: WorkerBridgeOptions): { fetch(request: Request): Promise<Response> } {
+export function createFetchBridge(options: FetchBridgeOptions): { fetch(request: Request): Promise<Response> } {
   const allow = buildAllowlist(options.allow);
-  if (typeof options.connect !== 'function') throw new Error("pass connect from 'cloudflare:sockets'");
+  if (typeof options.connect !== 'function') throw new Error('the fetch bridge needs connect(target)');
+  if (typeof options.upgrade !== 'function') throw new Error('the fetch bridge needs upgrade(request)');
   const origins = options.origins?.length ? new Set(options.origins) : null;
   const maxConnections = options.maxConnections ?? 256;
   const log = options.log ?? (() => {});
@@ -90,7 +91,7 @@ export function createWorkerBridge(options: WorkerBridgeOptions): { fetch(reques
       if ('status' in wanted) return text(wanted.status, wanted.why);
       if (active >= maxConnections) return text(503, 'too many connections');
       const { target, tls } = wanted;
-      const peer = request.headers.get('cf-connecting-ip') ?? 'unknown';
+      const peer = options.peer?.(request) || 'unknown';
       const label = `${formatHostPort(target.host, target.port)}${tls ? ' (TLS)' : ''}`;
 
       const link = { reply: (_line: string) => {}, close: (_reason?: string) => {} };
@@ -121,30 +122,36 @@ export function createWorkerBridge(options: WorkerBridgeOptions): { fetch(reques
           log(`${peer}: interceptor onClose failed: ${(err as Error).message}`);
         }
       };
-
-      // Answer the upgrade only once the pool is reachable, as the Node bridge does.
-      let socket: WorkerSocket | undefined;
-      try {
-        socket = options.connect({ hostname: target.host, port: target.port }, { secureTransport: tls ? 'on' : 'off', allowHalfOpen: false });
-        await withTimeout(socket.opened, timeoutMs);
-      } catch (err) {
+      const closePool = (socket: PoolSocket | undefined) => {
         try {
           socket?.close();
         } catch {
-          // already failed
+          // already closed
         }
+      };
+
+      // Answer the upgrade only once the pool is reachable, as the Node bridge does.
+      let pool: PoolSocket | undefined;
+      try {
+        pool = options.connect({ host: target.host, port: target.port, tls });
+        await withTimeout(pool.opened, timeoutMs);
+      } catch (err) {
+        closePool(pool);
         notifyClose();
         log(`${peer} refused: 502 could not connect to ${label}`);
         return text(502, `could not connect to ${label}: ${(err as Error).message}`);
       }
-      const pool = socket;
 
-      const Pair = options.WebSocketPair ?? (globalThis as { WebSocketPair?: WorkerBridgeOptions['WebSocketPair'] }).WebSocketPair;
-      if (!Pair) throw new Error('WebSocketPair is not available (not a Workers runtime?)');
-      const pair = new Pair();
-      const client = pair[0];
-      const server = pair[1];
-      server.accept();
+      let upgraded: { socket: ServerWebSocket; response: Response };
+      try {
+        upgraded = options.upgrade(request);
+      } catch (err) {
+        closePool(pool);
+        notifyClose();
+        log(`${peer}: upgrade failed: ${(err as Error).message}`);
+        return text(500, 'internal error');
+      }
+      const server = upgraded.socket;
       active++;
       log(`${peer} connected to ${label}`);
 
@@ -164,11 +171,7 @@ export function createWorkerBridge(options: WorkerBridgeOptions): { fetch(reques
           // already closed
         }
         writer.close().catch(() => {});
-        try {
-          pool.close();
-        } catch {
-          // already closed
-        }
+        closePool(pool);
         log(`${peer} disconnected from ${label} (${reason})`);
         notifyClose();
       };
@@ -221,8 +224,9 @@ export function createWorkerBridge(options: WorkerBridgeOptions): { fetch(reques
       server.addEventListener('error', () => finish(1011, 'websocket error'));
 
       // pool -> client: one message per line
+      const source = pool;
       void (async () => {
-        const reader = pool.readable.getReader();
+        const reader = source.readable.getReader();
         const lines = new LineDecoder(MAX_LINE_BYTES);
         try {
           for (;;) {
@@ -245,9 +249,7 @@ export function createWorkerBridge(options: WorkerBridgeOptions): { fetch(reques
         }
       })();
 
-      return options.upgradeResponse
-        ? options.upgradeResponse(client)
-        : new Response(null, { status: 101, webSocket: client } as ResponseInit & { webSocket: unknown });
+      return upgraded.response;
     },
   };
 }

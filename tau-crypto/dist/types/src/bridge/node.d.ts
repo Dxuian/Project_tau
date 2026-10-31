@@ -1,6 +1,6 @@
 import { type BridgeBaseOptions } from './core.ts';
-export { BRIDGE_FEATURES } from './core.ts';
-export type { BridgeConnection, BridgeInterceptor } from './core.ts';
+export { BRIDGE_FEATURES, poolTarget } from './core.ts';
+export type { BridgeBaseOptions, BridgeConnection, BridgeInterceptor } from './core.ts';
 export interface BridgeOptions extends BridgeBaseOptions {
     /** Port to listen on; 0 picks a free one. Not used with `server`. */
     port?: number;
@@ -8,6 +8,8 @@ export interface BridgeOptions extends BridgeBaseOptions {
     host?: string;
     /** Accept any certificate from pools reached with tls=1. Default false. */
     tlsInsecure?: boolean;
+    /** How long a pool may take to accept the connection. Default 30 s. */
+    connectTimeoutMs?: number;
     /**
      * An existing node:http (or https) server to handle WebSocket upgrades on,
      * instead of listening on `port`: the app keeps its own routes on it.

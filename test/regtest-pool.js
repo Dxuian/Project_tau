@@ -3,7 +3,8 @@
 // shares that are blocks go to submitblock.
 import { createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
-import { addressScript, rebuildBlockHeader } from '../btc.js';
+import { rebuildBlockHeader } from '../tau-crypto/dist/payouts.js';
+import { addressScript } from '../tau-crypto/dist/wallet.js';
 
 const h8 = (n) => n.toString(16).padStart(2, '0');
 const le = (n, bytes) => {

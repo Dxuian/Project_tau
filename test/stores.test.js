@@ -6,7 +6,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Miniflare } from 'miniflare';
-import { createPayoutService, createWallet, d1Stores, fileStores, loadConfig } from '../btc.js';
+import { createWallet } from '../tau-crypto/dist/wallet.js';
+import { createPayoutApi } from '../server/api.js';
+import { d1Stores } from '../server/cloudflare/d1-stores.js';
+import { loadConfig } from '../server/config.js';
+import { fileStores } from '../server/node/file-stores.js';
 import { OWNER, OWNER_WORDS, findBlockThrough, mockChainWith } from './helpers.js';
 
 let mf;
@@ -86,10 +90,10 @@ for (const [kind, make] of Object.entries(kinds)) {
       const stores = await make();
       const config = loadConfig({ TAU_OWNER_ADDRESS: OWNER, TAU_STORAGE: 'memory' });
       const visitor = createWallet().address;
-      const recorder = createPayoutService(config, { ...stores, chain: {} }); // the bridge side: no key
+      const recorder = createPayoutApi(config, { ...stores, chain: {} }); // the bridge side: no key
       const found = await findBlockThrough(recorder.intercept, visitor);
       const chain = mockChainWith(found);
-      const service = createPayoutService(config, { ...stores, chain, ownerMnemonic: OWNER_WORDS });
+      const service = createPayoutApi(config, { ...stores, chain, ownerMnemonic: OWNER_WORDS });
       const [first, second] = await Promise.all([service.verifyPayout(visitor), service.verifyPayout(visitor)]);
       assert.deepEqual([first[0].status, second[0].status].sort(), ['already-paid', 'paid']);
       assert.equal(chain.broadcasts.length, 1);

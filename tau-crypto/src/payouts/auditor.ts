@@ -4,11 +4,11 @@
 // address of its first authorize while logging in to the pool as `poolUser`,
 // remembers the jobs the pool sends with the extranonce1 in effect, and records
 // every submitted share (raw fields + whether it is a block) before forwarding it.
-import { isHex } from '../src/wallet/bytes.ts';
-import { addressScript, isValidAddress, type NetworkName } from '../src/wallet/keys.ts';
-import { coinbaseOutputs, paidTo, rebuildBlockHeader, type JobFields } from '../src/payouts/block.ts';
-import type { ShareRecord, ShareResult } from '../src/payouts/stores.ts';
-import type { BridgeConnection, BridgeInterceptor } from './core.ts';
+import { isHex } from '../wallet/bytes.ts';
+import { addressScript, isValidAddress, type NetworkName } from '../wallet/keys.ts';
+import { coinbaseOutputs, paidTo, rebuildBlockHeader, type JobFields } from './block.ts';
+import type { ShareRecord, ShareResult } from './stores.ts';
+import type { BridgeConnection, BridgeInterceptor } from '../bridge/core.ts';
 
 export interface ShareAuditorOptions {
   /** Address every visitor is logged in to the pool as: block rewards go to it. */

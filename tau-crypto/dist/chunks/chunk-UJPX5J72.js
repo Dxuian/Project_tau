@@ -1,14 +1,16 @@
 import {
+  detect,
+  detectRuntime,
+  nodeBuiltin
+} from "./chunk-DMFZA2GS.js";
+import {
   Emitter,
   LineDecoder,
   MAX_LINE_BYTES,
   StratumClientImpl,
-  detect,
-  detectRuntime,
   formatHostPort,
-  nodeBuiltin,
   parseStratumUrl
-} from "./chunk-54VWD4RY.js";
+} from "./chunk-TOFRYWU7.js";
 
 // src/algos.generated.ts
 var ALGO_NAMES = [null, "allium", "anime", "argon2d250", "argon2d500", "argon2d1000", "argon2d16000", "argon2d4096", "axiom", "blake", "blake2b", "blake2s", "blakecoin", "bmw", "bmw512", "c11", "deep", "dmd-gr", "groestl", "hex", "hmq1725", "jha", "keccak", "keccakc", "lbry", "lyra2h", "lyra2re", "lyra2rev2", "lyra2rev3", "lyra2z", "lyra2z330", "m7m", "minotaur", "minotaurx", "myr-gr", "neoscrypt", "nist5", "pentablake", "phi1612", "phi2", "polytimos", "power2b", "quark", "qubit", "scrypt", "sha256d", "sha256dt", "sha256q", "sha256t", "sha3d", "sha512256d", "skein", "skein2", "skunk", "sonoa", "timetravel", "timetravel10", "tribus", "vanilla", "veltor", "verthash", "whirlpool", "whirlpoolx", "x11", "x11evo", "x11gost", "x12", "x13", "x13bcd", "x13sm3", "x14", "x15", "x16r", "x16rv2", "x16rt", "x16rt-veil", "x16s", "x17", "x20r", "x21s", "x22i", "x25x", "xevan", "yescrypt", "yescryptr8", "yescryptr8g", "yescryptr16", "yescryptr32", "yespower", "yespowerr16", "yespower-b2b", "zr5"];

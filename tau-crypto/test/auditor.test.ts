@@ -1,8 +1,8 @@
-// The share auditor (bridge/auditor.ts): what it forwards, rewrites, refuses and records.
+// The share auditor (src/payouts/auditor.ts): what it forwards, rewrites, refuses and records.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createShareAuditor } from '../bridge/auditor.ts';
-import type { BridgeConnection } from '../bridge/core.ts';
+import { createShareAuditor } from '../src/payouts/auditor.ts';
+import type { BridgeConnection } from '../src/bridge/core.ts';
 import { coinbaseOutputs, rebuildBlockHeader } from '../src/payouts/index.ts';
 import type { ShareRecord, ShareResult } from '../src/payouts/index.ts';
 import { createWallet, walletFromMnemonic } from '../src/wallet/index.ts';

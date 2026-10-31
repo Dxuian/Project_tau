@@ -13,12 +13,14 @@ import {
   listBackends,
   mineBTC,
   resolveAlgo
-} from "./chunks/chunk-7LOKGIHE.js";
+} from "./chunks/chunk-UJPX5J72.js";
 import {
   detect,
-  detectRuntime,
+  detectRuntime
+} from "./chunks/chunk-DMFZA2GS.js";
+import {
   parseStratumUrl
-} from "./chunks/chunk-54VWD4RY.js";
+} from "./chunks/chunk-TOFRYWU7.js";
 export {
   BUILT_VARIANTS,
   DEFAULT_POOL,

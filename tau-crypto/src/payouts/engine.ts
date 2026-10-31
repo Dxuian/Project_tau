@@ -49,7 +49,8 @@ function serialized<T>(key: object, fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-function percent(value: number | bigint): bigint {
+/** `value` as a bigint percent; throws unless it is a whole number from 1 to 100. */
+export function checkSharePercent(value: number | bigint): bigint {
   const p = typeof value === 'bigint' ? value : Number.isInteger(value) ? BigInt(value) : -1n;
   if (p < 1n || p > 100n) throw new Error('sharePercent must be a whole number from 1 to 100');
   return p;
@@ -64,7 +65,7 @@ function percent(value: number | bigint): bigint {
 export function verifyPayout(address: string, options: PayoutOptions): Promise<PayoutResult[]> {
   const network = options.network ?? 'mainnet';
   addressScript(address, network);
-  const share = percent(options.sharePercent);
+  const share = checkSharePercent(options.sharePercent);
   const minConfirmations = options.minConfirmations ?? COINBASE_MATURITY;
   if (minConfirmations < COINBASE_MATURITY) throw new Error(`minConfirmations must be at least ${COINBASE_MATURITY}`);
   if (!options.shares || !options.ledger || !options.chain) throw new Error('shares, ledger and chain are required');

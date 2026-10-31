@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Node target: node server.js, configured by TAU_* environment variables and
-// OWNER_MNEMONIC (see README). Serves the payout bridge and POST /payout.
-import { loadConfig } from './app/config.js';
-import { startNodeServer } from './app/node.js';
+// Node target: `node server/node/server.js`, configured by TAU_* environment
+// variables and OWNER_MNEMONIC (see README). Serves the payout bridge and
+// POST /payout.
+import { loadConfig } from '../config.js';
+import { startNodeServer } from './index.js';
 
 const log = (line) => console.error(`${new Date().toISOString()} ${line}`);
 const config = loadConfig(process.env, { target: 'node' });

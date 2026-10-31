@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createWallet, loadConfig, startNodeServer } from '../btc.js';
+import { createWallet } from '../tau-crypto/dist/wallet.js';
+import { loadConfig } from '../server/config.js';
+import { startNodeServer } from '../server/node/index.js';
 import { startRegtestPool } from './regtest-pool.js';
 import { mineBlocks, nodeReady, ownerReward, regtest, regtestChainEnv } from './helpers.js';
 

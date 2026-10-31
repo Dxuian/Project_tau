@@ -1,6 +1,6 @@
-import { type NetworkName } from '../src/wallet/keys.ts';
-import type { ShareRecord, ShareResult } from '../src/payouts/stores.ts';
-import type { BridgeConnection, BridgeInterceptor } from './core.ts';
+import { type NetworkName } from '../wallet/keys.ts';
+import type { ShareRecord, ShareResult } from './stores.ts';
+import type { BridgeConnection, BridgeInterceptor } from '../bridge/core.ts';
 export interface ShareAuditorOptions {
     /** Address every visitor is logged in to the pool as: block rewards go to it. */
     poolUser: string;

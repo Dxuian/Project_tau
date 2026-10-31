@@ -1,4 +1,4 @@
-// WebSocket transport to a tau-crypto bridge (bridge/server.ts), for browsers
+// WebSocket transport to a tau-crypto bridge (src/bridge/), for browsers
 // and any runtime with a global WebSocket. One text message is one stratum line.
 import type { Transport, TransportFactory } from '../types.ts';
 import { MAX_LINE_BYTES, formatHostPort, parseStratumUrl } from './client.ts';

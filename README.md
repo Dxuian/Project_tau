@@ -7,27 +7,37 @@ Browser Bitcoin mining where visitors keep a share of the blocks they find.
 
 > **Consent and odds.** Mining runs the visitor's CPU. Only start it after they agree, and tell them about the split. Also tell them the odds: one browser at ~10 MH/s finds a Bitcoin block about once in 2 billion years, so this is a lottery ticket, not income.
 
-## What lives where
+## Library and server code
 
-The rule: **mechanisms go in the library; your policy, keys, storage and deployment stay in the app.**
+The repo has two parts:
 
-| piece | where |
+| folder | what | rule |
+|---|---|---|
+| [`tau-crypto/`](tau-crypto/README.md) | **the crypto library**: mining, wallets and new addresses, payments, payout proofs, the share auditor, `createPayoutService`, and the bridges | mechanisms only; every value is a parameter; no keys, storage or platform code of its own |
+| `server/` | **server-side code**, not part of the library: your settings, the payout HTTP API, storage, and the Node and Cloudflare entry points | your policy, keys, storage and deployment |
+
+Inside `server/`:
+
+| file | what |
 |---|---|
-| mining: `createMiner`, `mineBTC` | library: `tau-crypto` |
-| wallets: `createWallet`, `newAddress`, `walletFromMnemonic`, `isValidAddress` (offline) | library: `tau-crypto/wallet` |
-| sending BTC: `payout`, plus the chain clients `esplora` / `bitcoinCore` | library: `tau-crypto/wallet` |
-| proof that a share is a block (`rebuildBlockHeader`, `verifyBlock`), and the payout engine `verifyPayout(address, { shares, ledger, chain, ownerMnemonic, sharePercent })` | library: `tau-crypto/payouts` |
-| the bridges, Node and Cloudflare (`createBridge`, `createWorkerBridge`), and the share auditor | library: `tau-crypto/bridge` |
-| your settings: owner address, 10%, pool, network, chain provider, allowed origins, target | app: `app/config.js` (`TAU_*` variables) |
-| your key: `OWNER_MNEMONIC` | app: an environment variable or a Worker secret, never in a file |
-| where records live: files (Node) or D1 (Cloudflare) | app: `app/stores/` |
-| where it runs: `server.js` (Node) or `worker.js` + `wrangler.toml` (Cloudflare) | app |
+| `server/config.js` | your settings from `TAU_*` variables (`loadConfig`), and the chain client they choose |
+| `server/api.js` | `createPayoutApi`: the library's `createPayoutService` with your settings, served as a web-standard `fetch(request)` handler for `POST /payout` and `GET /health` |
+| `server/node/` | the Node target: `server.js` (entry point), `index.js` (the HTTP server and the library's Node bridge on one port), `file-stores.js` (records as files) |
+| `server/cloudflare/` | the Cloudflare target: `worker.js`, `d1-stores.js` (records in D1), `schema.sql`, `wrangler.toml` |
 
-`btc.js` re-exports all of it, so `createWallet`, `newAddress`, `mineBTC`, `payout`, `verifyPayout` and `startPayoutBridge` still come from one file.
+The Cloudflare-specific part lives in `server/cloudflare/worker.js` and is small. It hands the library's runtime-neutral bridge (`createFetchBridge`) three things: Workers' TCP `connect()`, a `WebSocketPair` for the upgrade, and the `cf-connecting-ip` header.
+
+### A Next.js or Cloudflare Pages app later
+
+The library's entries are split by where they run (see the [table](tau-crypto/README.md#entries-and-where-each-runs)):
+- **Pages and client components (`'use client'`)** import `tau-crypto` (the miner) and `tau-crypto/wallet` (wallets, new addresses). The visitor's words stay in their browser.
+- **Server code** imports `tau-crypto/payouts` and `tau-crypto/bridge`, together with `server/config.js`, `server/api.js` and a store. That covers `'use server'` actions, route handlers, Pages Functions and Workers.
+- **`server/api.js` is already web-standard.** Its `fetch(request)` can be a Next.js route handler or a Pages Function as it is.
+- **The WebSocket bridge needs a runtime that accepts upgrades and opens TCP sockets.** A Worker or Pages Function does, with the same glue as `worker.js`.
 
 ## Settings
 
-One set of settings works for both targets. On Node they are environment variables; on Cloudflare they are the `[vars]` in `wrangler.toml`.
+One set of settings works for both targets. On Node they are environment variables; on Cloudflare they are the `[vars]` in `server/cloudflare/wrangler.toml`.
 
 | variable | default | meaning |
 |---|---|---|
@@ -46,10 +56,10 @@ Make the owner wallet a dedicated one with `createWallet()`, not your personal s
 
 ## Pick a target
 
-### Node: `server.js` on your server
+### Node: `server/node/server.js` on your server
 
 ```sh
-TAU_OWNER_ADDRESS=bc1q… OWNER_MNEMONIC="word1 … word12" TAU_ORIGINS=https://yoursite.com node server.js
+TAU_OWNER_ADDRESS=bc1q… OWNER_MNEMONIC="word1 … word12" TAU_ORIGINS=https://yoursite.com node server/node/server.js
 ```
 
 One port serves:
@@ -59,15 +69,15 @@ One port serves:
 
 The bridge doesn't do TLS itself: for `wss://`, put it behind nginx or Caddy.
 
-### Cloudflare: `worker.js`, no server
+### Cloudflare: `server/cloudflare/worker.js`, no server
 
-These steps run under your own Cloudflare account:
+These steps run under your own Cloudflare account, from the repo root:
 
 ```sh
-npx wrangler d1 create tau-payouts            # put the id into wrangler.toml
-# edit wrangler.toml: TAU_OWNER_ADDRESS, TAU_ORIGINS
-npx wrangler secret put OWNER_MNEMONIC
-npx wrangler deploy
+npx wrangler d1 create tau-payouts -c server/cloudflare/wrangler.toml   # put the id into wrangler.toml
+# edit server/cloudflare/wrangler.toml: TAU_OWNER_ADDRESS, TAU_ORIGINS
+npx wrangler secret put OWNER_MNEMONIC -c server/cloudflare/wrangler.toml
+npx wrangler deploy -c server/cloudflare/wrangler.toml
 ```
 
 It serves the same three things from the Worker. Records go to D1, and the tables are created on first use. An optional cron trigger in `wrangler.toml` runs the payout sweep.
@@ -106,7 +116,7 @@ About `newAddress(wallet)`:
 Nothing a visitor says is trusted.
 
 1. **The bridge sees everything.** Every visitor's miner talks to the pool through your bridge. The bridge sees each job the pool sends and each share the miner submits, on a connection tied to the visitor address it logged in with. One address per connection.
-2. **Each share is recorded before the pool sees it.** The bridge's auditor rebuilds the share's block header itself and hashes it, so proof of work can't be faked. It stores the raw share in a file or in D1, together with whether it is a block, and only then forwards the share to the pool.
+2. **Each share is recorded before the pool sees it.** The library's share auditor rebuilds the share's block header itself and hashes it, so proof of work can't be faked. It stores the raw share in a file or in D1, together with whether it is a block, and only then forwards the share to the pool.
 3. **`verifyPayout` confirms the block on the blockchain.** It rebuilds each recorded block from the raw fields (it never trusts a stored hash) and pays only if all of these hold:
    - the block is in the best chain;
    - it has at least 100 confirmations, so a reorg can't undo it;
@@ -136,7 +146,7 @@ What it refuses, and why:
 | `not-paid-yet` | verified, but the payment couldn't be built yet, e.g. no mature funds, or fees above the cap |
 | `needs-review` | a payment was started but not confirmed as sent |
 
-For `needs-review`, first look the txid up on a block explorer. If it never reached the chain, release the attempt to allow a retry: run `ledger.void(blockHash)` on the store (it's in `app/stores/`). The retry builds the identical transaction, so even if the first attempt did get through, the visitor is never paid twice.
+For `needs-review`, first look the txid up on a block explorer. If it never reached the chain, release the attempt to allow a retry: run `ledger.void(blockHash)` on the store (`server/node/file-stores.js` or `server/cloudflare/d1-stores.js`). The retry builds the identical transaction, so even if the first attempt did get through, the visitor is never paid twice.
 
 ## Security notes
 
@@ -153,15 +163,16 @@ Everything runs in Docker:
 
 ```sh
 tau-crypto/dev setup   # once: builds the dev image
-./dev setup                 # regtest bitcoind image, npm ci --ignore-scripts
-./dev test                  # all tests (starts a fresh regtest node)
-./dev bundle                # the Worker as `wrangler deploy` would build it
+./dev setup            # regtest bitcoind image, npm ci --ignore-scripts
+./dev test             # all tests (starts a fresh regtest node)
+./dev bundle           # the Worker as `wrangler deploy` would build it
 ```
 
 The tests cover:
-- loading and validating the settings;
+- loading and validating the settings, and the payout API through `fetch(request)`;
 - both storage adapters against one contract, including concurrent reservations;
-- end to end on both targets: the real miner mines through the bridge (`server.js`, and `worker.js` in workerd with D1) to a regtest pool. bitcoind accepts the block; once it is mature, `POST /payout` pays exactly 10%, once, and an orphaned block is never paid;
+- end to end on both targets. The real miner mines through the bridge to a regtest pool, on `server/node` and on `server/cloudflare/worker.js` in workerd with D1. bitcoind accepts the block; once it is mature, `POST /payout` pays exactly 10%, once, and an orphaned block is never paid;
+- the Worker's Cloudflare glue in workerd: origin and target refusals, and 502 for an unreachable pool;
 - a page in headless Chromium mining through the bridge and calling `/payout` across origins.
 
 The library's own tests, build and dependency audit run with `tau-crypto/dev`.

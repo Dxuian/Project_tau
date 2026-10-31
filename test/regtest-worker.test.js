@@ -1,16 +1,19 @@
-// End to end, Cloudflare target: worker.js bundled by wrangler (as `wrangler
-// deploy` would) runs in workerd via Miniflare, with D1 and Workers TCP sockets.
+// End to end, Cloudflare target: server/cloudflare/worker.js, bundled by
+// wrangler as `wrangler deploy` would, runs in workerd via Miniflare with D1
+// and Workers TCP sockets.
 // The real miner mines through it to a regtest pool; POST /payout on the Worker
 // pays the visitor 10% of the block, once.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { request as httpRequest } from 'node:http';
+import { createServer as createNetServer } from 'node:net';
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Miniflare } from 'miniflare';
-import { createWallet } from '../btc.js';
+import { createWallet } from '../tau-crypto/dist/wallet.js';
 import { startRegtestPool } from './regtest-pool.js';
 import { mineBlocks, nodeReady, ownerReward, regtest, regtestChainEnv } from './helpers.js';
 
@@ -20,7 +23,7 @@ const core = regtest();
 function bundleWorker(t) {
   const out = mkdtempSync(join(tmpdir(), 'tau-worker-'));
   t.after(() => rmSync(out, { recursive: true, force: true }));
-  const r = spawnSync('npx', ['wrangler', 'deploy', '--dry-run', '--outdir', out], {
+  const r = spawnSync('npx', ['wrangler', 'deploy', '--dry-run', '--config', 'server/cloudflare/wrangler.toml', '--outdir', out], {
     cwd: ROOT,
     encoding: 'utf8',
     env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1', HOME: out },
@@ -37,6 +40,67 @@ test('the Worker bundle holds the bridge and payouts, not the miner', (t) => {
   assert.ok(code.includes('cloudflare:sockets'));
   const kib = Buffer.byteLength(code) / 1024;
   assert.ok(kib < 1024, `bundle is ${kib.toFixed(0)} KiB`);
+});
+
+/** Status (and body) of a WebSocket upgrade request, read off the raw HTTP response. */
+function upgradeStatus(base, path, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest(new URL(path, base), {
+      headers: { connection: 'Upgrade', upgrade: 'websocket', 'sec-websocket-version': '13', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', ...headers },
+    });
+    req.on('response', async (res) => {
+      let body = '';
+      for await (const chunk of res) body += chunk;
+      resolve({ status: res.statusCode, body });
+    });
+    req.on('upgrade', (_res, socket) => {
+      socket.destroy();
+      resolve({ status: 101, body: '' });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+async function closedPort() {
+  const server = createNetServer();
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+
+test("the Worker's Cloudflare glue in workerd: origin and target refusals, 502 for an unreachable pool", async (t) => {
+  const { out } = bundleWorker(t);
+  const port = await closedPort();
+  const mf = new Miniflare({
+    modules: true,
+    scriptPath: join(out, 'worker.js'),
+    modulesRoot: out,
+    compatibilityDate: '2026-07-30',
+    d1Databases: ['DB'],
+    host: '127.0.0.1',
+    port: 0,
+    bindings: {
+      TAU_TARGET: 'cloudflare',
+      TAU_NETWORK: 'regtest',
+      TAU_POOL: `stratum+tcp://127.0.0.1:${port}`,
+      TAU_OWNER_ADDRESS: createWallet({ network: 'regtest' }).address,
+      TAU_STORAGE: 'd1',
+      TAU_ORIGINS: 'https://site.example',
+    },
+  });
+  t.after(() => mf.dispose());
+  const base = await mf.ready;
+  const site = { origin: 'https://site.example' };
+  assert.equal((await upgradeStatus(base, `/?target=127.0.0.1:${port}&tls=0`)).status, 403, 'no origin');
+  const evil = await upgradeStatus(base, '/?target=evil.example:3333&tls=0', site);
+  assert.deepEqual([evil.status, evil.body.trim()], [403, 'target not allowed']);
+  const down = await upgradeStatus(base, `/?target=127.0.0.1:${port}&tls=0`, site);
+  assert.equal(down.status, 502);
+  assert.match(down.body, /could not connect to 127\.0\.0\.1/);
+  const health = await (await mf.dispatchFetch('http://worker.local/health')).json();
+  assert.equal(health.canPay, false, 'no OWNER_MNEMONIC: records only');
 });
 
 test('Cloudflare target: a visitor finds a block through the Worker and is paid 10%, once', { skip: !core && 'BITCOIND_RPC not set (run ./dev test)', timeout: 300_000 }, async (t) => {
