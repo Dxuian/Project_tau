@@ -29,7 +29,8 @@ fi
 
 tty_flag=()
 if [ ! -t 0 ] || [ ! -t 1 ]; then tty_flag=(-T); fi
-run() { docker compose run --rm "${tty_flag[@]}" "$@"; }
+# ${a[@]+"${a[@]}"}: an empty array is "unbound" to set -u in macOS bash 3.2.
+run() { docker compose run --rm ${tty_flag[@]+"${tty_flag[@]}"} "$@"; }
 
 check_memory() {
   local mem
