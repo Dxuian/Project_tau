@@ -4,13 +4,15 @@ import {
   createWallet,
   deriveKey,
   isValidAddress,
+  newAddress,
   walletFromMnemonic
-} from "./chunk-S62YAEXG.js";
+} from "./chunk-APBMG6TN.js";
 export {
   addressScript,
   bitcoinNetwork,
   createWallet,
   deriveKey,
   isValidAddress,
+  newAddress,
   walletFromMnemonic
 };

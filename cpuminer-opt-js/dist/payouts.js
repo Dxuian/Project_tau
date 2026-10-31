@@ -1,17 +1,17 @@
 import {
   buildPayment
-} from "./chunks/chunk-MGOMGXAX.js";
+} from "./chunks/chunk-E3XZQTDT.js";
 import {
   coinbaseOutputs,
   nbitsTarget,
   paidTo,
   rebuildBlockHeader,
   verifyBlock
-} from "./chunks/chunk-TF2SH2BN.js";
+} from "./chunks/chunk-JIER3F7Z.js";
 import {
   addressScript,
   deriveKey
-} from "./chunks/chunk-S62YAEXG.js";
+} from "./chunks/chunk-APBMG6TN.js";
 
 // src/payouts/engine.ts
 var COINBASE_MATURITY = 100;

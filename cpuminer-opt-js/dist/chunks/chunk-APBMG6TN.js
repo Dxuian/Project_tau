@@ -10771,11 +10771,12 @@ function leBigInt(bytes) {
 // src/wallet/keys.ts
 var REGTEST = Object.freeze({ bech32: "bcrt", pubKeyHash: 111, scriptHash: 196, wif: 239 });
 var NETWORKS = { mainnet: NETWORK, testnet: TEST_NETWORK, regtest: REGTEST };
-var PATHS = {
-  mainnet: "m/84'/0'/0'/0/0",
-  testnet: "m/84'/1'/0'/0/0",
-  regtest: "m/84'/1'/0'/0/0"
+var ACCOUNTS = {
+  mainnet: "m/84'/0'/0'",
+  testnet: "m/84'/1'/0'",
+  regtest: "m/84'/1'/0'"
 };
+var MAX_INDEX = 2 ** 31 - 1;
 function bitcoinNetwork(name = "mainnet") {
   const n = NETWORKS[name];
   if (!n) throw new Error(`unknown network "${name}" (mainnet, testnet or regtest)`);
@@ -10798,11 +10799,15 @@ function isValidAddress(address, network = "mainnet") {
     return false;
   }
 }
-function deriveKey(mnemonic, network = "mainnet", passphrase = "") {
-  const words = String(mnemonic ?? "").trim().toLowerCase().split(/\s+/).join(" ");
+function normalizeWords(mnemonic) {
+  return String(mnemonic ?? "").trim().toLowerCase().split(/\s+/).join(" ");
+}
+function deriveKey(mnemonic, network = "mainnet", passphrase = "", index = 0) {
+  const words = normalizeWords(mnemonic);
   if (!validateMnemonic(words, wordlist)) throw new Error("invalid mnemonic (unknown word or bad checksum)");
+  if (!Number.isSafeInteger(index) || index < 0 || index > MAX_INDEX) throw new Error(`index must be a whole number from 0 to ${MAX_INDEX}`);
   const net = bitcoinNetwork(network);
-  const path = PATHS[network];
+  const path = `${ACCOUNTS[network]}/0/${index}`;
   const key = HDKey.fromMasterSeed(mnemonicToSeedSync(words, passphrase)).derive(path);
   if (!key.publicKey || !key.privateKey) throw new Error("key derivation failed");
   const payment = p2wpkh(key.publicKey, net);
@@ -10814,7 +10819,13 @@ function createWallet({ words = 12, network = "mainnet" } = {}) {
   bitcoinNetwork(network);
   const mnemonic = generateMnemonic(wordlist, words === 12 ? 128 : 256);
   const { address, path } = deriveKey(mnemonic, network);
-  return { mnemonic, address, path, network };
+  return { mnemonic, address, path, network, index: 0 };
+}
+function newAddress(wallet, { index } = {}) {
+  const network = wallet.network ?? "mainnet";
+  const next = index ?? (wallet.index ?? 0) + 1;
+  const { address, path } = deriveKey(wallet.mnemonic, network, "", next);
+  return { mnemonic: normalizeWords(wallet.mnemonic), address, path, network, index: next };
 }
 function walletFromMnemonic(mnemonic, { network = "mainnet", passphrase = "" } = {}) {
   const { address, path } = deriveKey(mnemonic, network, passphrase);
@@ -10836,6 +10847,7 @@ export {
   isValidAddress,
   deriveKey,
   createWallet,
+  newAddress,
   walletFromMnemonic
 };
 /*! Bundled license information:

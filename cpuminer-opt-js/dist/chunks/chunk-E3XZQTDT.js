@@ -4,7 +4,7 @@ import {
   bitcoinNetwork,
   deriveKey,
   fromHex
-} from "./chunk-S62YAEXG.js";
+} from "./chunk-APBMG6TN.js";
 
 // src/wallet/payment.ts
 var DUST_SATS = 546n;

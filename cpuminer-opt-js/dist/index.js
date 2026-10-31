@@ -13,7 +13,7 @@ import {
   listBackends,
   mineBTC,
   resolveAlgo
-} from "./chunks/chunk-FITWV66I.js";
+} from "./chunks/chunk-ZHQ6XDP5.js";
 import {
   detect,
   detectRuntime,

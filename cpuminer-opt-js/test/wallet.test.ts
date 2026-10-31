@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { entropyToMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { HDKey } from '@scure/bip32';
-import { addressScript, createWallet, isValidAddress, walletFromMnemonic } from '../src/wallet/index.ts';
+import { addressScript, createWallet, isValidAddress, newAddress, walletFromMnemonic } from '../src/wallet/index.ts';
 
 const ABANDON = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
@@ -14,6 +14,55 @@ test('BIP84 test vector: first receive address', () => {
   assert.equal(w.path, "m/84'/0'/0'/0/0");
   assert.equal(w.address, 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu');
   assert.equal(addressScript(w.address), '0014c0cebcd6c3d3ca8c75dc5ec62ebe55330ef910e2');
+});
+
+test('BIP84 test vector: newAddress gives the second receive address, then the ones after it', () => {
+  const second = newAddress({ mnemonic: ABANDON });
+  assert.deepEqual(second, {
+    mnemonic: ABANDON,
+    address: 'bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g',
+    path: "m/84'/0'/0'/0/1",
+    network: 'mainnet',
+    index: 1,
+  });
+  assert.equal(newAddress({ mnemonic: ABANDON }, { index: 0 }).address, 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu');
+  const third = newAddress(second);
+  assert.equal(third.path, "m/84'/0'/0'/0/2");
+  assert.equal(newAddress(third).path, "m/84'/0'/0'/0/3");
+  // The same wallet gives the same address: nothing is remembered between calls.
+  assert.deepEqual(newAddress(second), third);
+  assert.deepEqual(newAddress({ mnemonic: ABANDON }, { index: 2 }), third);
+  assert.equal(newAddress({ mnemonic: ` ${ABANDON.toUpperCase()} ` }).mnemonic, ABANDON);
+});
+
+test('newAddress keeps the wallet and its network, and walks distinct addresses', () => {
+  const w = createWallet({ network: 'regtest' });
+  assert.equal(w.index, 0);
+  assert.equal(createWallet().index, 0);
+  const seen = new Set([w.address]);
+  let current = w;
+  for (let i = 1; i <= 20; i++) {
+    current = newAddress(current);
+    assert.equal(current.index, i);
+    assert.equal(current.path, `m/84'/1'/0'/0/${i}`);
+    assert.equal(current.mnemonic, w.mnemonic);
+    assert.equal(current.network, 'regtest');
+    assert.match(current.address, /^bcrt1q/);
+    assert.ok(isValidAddress(current.address, 'regtest'));
+    assert.ok(!seen.has(current.address));
+    seen.add(current.address);
+  }
+  assert.equal(newAddress(w, { index: 0 }).address, w.address);
+});
+
+test('newAddress rejects bad indexes, words and networks', () => {
+  for (const index of [-1, 1.5, 2 ** 31, Number.NaN, '3' as unknown as number]) {
+    assert.throws(() => newAddress({ mnemonic: ABANDON }, { index }), /index must be a whole number/);
+  }
+  assert.throws(() => newAddress({ mnemonic: ABANDON, index: 2 ** 31 - 1 }), /index must be a whole number/);
+  assert.equal(newAddress({ mnemonic: ABANDON }, { index: 2 ** 31 - 1 }).index, 2 ** 31 - 1);
+  assert.throws(() => newAddress({ mnemonic: ABANDON.replace('about', 'abandon') }), /checksum/);
+  assert.throws(() => newAddress({ mnemonic: ABANDON, network: 'litecoin' as 'mainnet' }), /unknown network/);
 });
 
 test('BIP39 test vectors (Trezor, passphrase "TREZOR")', () => {

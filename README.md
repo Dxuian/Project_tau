@@ -14,7 +14,7 @@ The rule: **mechanisms go in the library; your policy, keys, storage and deploym
 | piece | where |
 |---|---|
 | mining: `createMiner`, `mineBTC` | library: `cpuminer-opt-js` |
-| wallets: `createWallet`, `walletFromMnemonic`, `isValidAddress` (offline) | library: `cpuminer-opt-js/wallet` |
+| wallets: `createWallet`, `newAddress`, `walletFromMnemonic`, `isValidAddress` (offline) | library: `cpuminer-opt-js/wallet` |
 | sending BTC: `payout`, plus the chain clients `esplora` / `bitcoinCore` | library: `cpuminer-opt-js/wallet` |
 | proof that a share is a block (`rebuildBlockHeader`, `verifyBlock`), and the payout engine `verifyPayout(address, { shares, ledger, chain, ownerMnemonic, sharePercent })` | library: `cpuminer-opt-js/payouts` |
 | the bridges, Node and Cloudflare (`createBridge`, `createWorkerBridge`), and the share auditor | library: `cpuminer-opt-js/bridge` |
@@ -23,7 +23,7 @@ The rule: **mechanisms go in the library; your policy, keys, storage and deploym
 | where records live: files (Node) or D1 (Cloudflare) | app: `app/stores/` |
 | where it runs: `server.js` (Node) or `worker.js` + `wrangler.toml` (Cloudflare) | app |
 
-`btc.js` re-exports all of it, so `createWallet`, `mineBTC`, `payout`, `verifyPayout` and `startPayoutBridge` still come from one file.
+`btc.js` re-exports all of it, so `createWallet`, `newAddress`, `mineBTC`, `payout`, `verifyPayout` and `startPayoutBridge` still come from one file.
 
 ## Settings
 
@@ -84,15 +84,22 @@ Serve the `cpuminer-opt-js/dist/` folder:
 ```html
 <script type="module">
   import { mineBTC } from './cpuminer-opt-js/dist/index.js';
-  import { createWallet } from './cpuminer-opt-js/dist/wallet.js';
-  const wallet = createWallet();               // show wallet.mnemonic once; keep only wallet.address
+  import { createWallet, newAddress } from './cpuminer-opt-js/dist/wallet.js';
+  const wallet = createWallet();               // show wallet.mnemonic once; never store or send it
   startButton.onclick = async () => {
     const miner = await mineBTC(wallet.address, 'wss://pool.yoursite.com');   // your bridge (Node or Worker)
     miner.on('hashrate', (h) => console.log(h.hps));
   };
+  // another address from the same words: newAddress(wallet) is index 1, newAddress(thatResult) index 2, …
   // later: fetch('https://pool.yoursite.com/payout', { method: 'POST', body: JSON.stringify({ address: wallet.address }) })
 </script>
 ```
+
+About `newAddress(wallet)`:
+- **It gives the wallet's next receive address** (BIP84 `m/84'/0'/0'/0/1`, then `/2`, …) and returns the wallet at that address. Pass that result to the next call to get the address after it. The library remembers nothing: the same wallet gives the same address, and `newAddress(wallet, { index: 7 })` gives address 7.
+- **It needs the words.** Call it while the page still has the wallet object, or after the visitor types the words back in as `{ mnemonic, network, index }`. Keep `index` (not the words) to carry on from there.
+- **Gap limit.** Sparrow and other BIP84 wallets restored from the words find what every address received, but they stop looking after 20 unused addresses in a row. Only hand out a new address once the earlier ones have been used, or raise the gap limit when restoring.
+- **`payout` only spends from the first address** (index 0). This is why `TAU_OWNER_ADDRESS` must be the owner wallet's first address, and the service checks that. Visitors spend what reaches their other addresses with Sparrow or any other BIP84 wallet.
 
 ## How a win is verified
 

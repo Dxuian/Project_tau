@@ -13,12 +13,12 @@ import {
   coinbaseOutputs,
   paidTo,
   rebuildBlockHeader
-} from "./chunks/chunk-TF2SH2BN.js";
+} from "./chunks/chunk-JIER3F7Z.js";
 import {
   addressScript,
   isHex,
   isValidAddress
-} from "./chunks/chunk-S62YAEXG.js";
+} from "./chunks/chunk-APBMG6TN.js";
 import {
   LineDecoder,
   MAX_LINE_BYTES,

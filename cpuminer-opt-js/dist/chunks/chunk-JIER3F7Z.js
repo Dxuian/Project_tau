@@ -6,7 +6,7 @@ import {
   sha256d,
   swap32,
   toHex
-} from "./chunk-S62YAEXG.js";
+} from "./chunk-APBMG6TN.js";
 
 // src/payouts/block.ts
 function nbitsTarget(nbits) {

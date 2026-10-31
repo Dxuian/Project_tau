@@ -1,13 +1,14 @@
 import {
   buildPayment,
   payout
-} from "./chunks/chunk-MGOMGXAX.js";
+} from "./chunks/chunk-E3XZQTDT.js";
 import {
   addressScript,
   createWallet,
   isValidAddress,
+  newAddress,
   walletFromMnemonic
-} from "./chunks/chunk-S62YAEXG.js";
+} from "./chunks/chunk-APBMG6TN.js";
 
 // src/wallet/chain.ts
 var HASH_RE = /^[0-9a-f]{64}$/;
@@ -137,6 +138,7 @@ export {
   createWallet,
   esplora,
   isValidAddress,
+  newAddress,
   payout,
   walletFromMnemonic
 };

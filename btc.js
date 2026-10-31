@@ -2,7 +2,7 @@
 //
 //   Library (cpuminer-opt-js), generic mechanisms that take every value as a parameter:
 //     mining:   mineBTC, DEFAULT_POOL
-//     wallets:  createWallet, walletFromMnemonic, isValidAddress, addressScript
+//     wallets:  createWallet, newAddress, walletFromMnemonic, isValidAddress, addressScript
 //     payments: payout, buildPayment, esplora, bitcoinCore
 //     proofs:   rebuildBlockHeader, verifyBlock, memoryStores
 //   App (this repo), your policy, storage and deployment:
@@ -10,7 +10,7 @@
 //     startNodeServer / startPayoutBridge (Node target; worker.js is the Cloudflare one),
 //     verifyPayout(address): the library engine with your config, stores and key.
 export { DEFAULT_POOL, mineBTC } from './cpuminer-opt-js/dist/index.js';
-export { addressScript, bitcoinCore, buildPayment, createWallet, esplora, isValidAddress, payout, walletFromMnemonic } from './cpuminer-opt-js/dist/wallet.js';
+export { addressScript, bitcoinCore, buildPayment, createWallet, esplora, isValidAddress, newAddress, payout, walletFromMnemonic } from './cpuminer-opt-js/dist/wallet.js';
 export { memoryStores, payoutAll, rebuildBlockHeader, verifyBlock } from './cpuminer-opt-js/dist/payouts.js';
 export { DEFAULTS, loadConfig, validateConfig } from './app/config.js';
 export { chainFromConfig, createPayoutService, poolTarget, toJson } from './app/service.js';

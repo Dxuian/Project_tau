@@ -134,7 +134,7 @@ application built on them.
 
 | entry | what |
 |---|---|
-| `cpuminer-opt-js/wallet` | `createWallet()` (BIP39 words + BIP84 `bc1q…` address, offline), `walletFromMnemonic`, `isValidAddress`, `addressScript`; `payout(to, sats, { mnemonic, chain })` / `buildPayment` (largest-first coin selection, upper-bound fee, change, signing); chain clients `esplora(url)` (mempool.space) and `bitcoinCore({ url, user, pass })` |
+| `cpuminer-opt-js/wallet` | `createWallet()` (BIP39 words + BIP84 `bc1q…` address, offline), `newAddress(wallet, { index? })` (the wallet's next receive address, `m/84'/0'/0'/0/<index>`, returned as the wallet at that address), `walletFromMnemonic`, `isValidAddress`, `addressScript`; `payout(to, sats, { mnemonic, chain })` / `buildPayment` (spends from the first address; largest-first coin selection, upper-bound fee, change, signing); chain clients `esplora(url)` (mempool.space) and `bitcoinCore({ url, user, pass })` |
 | `cpuminer-opt-js/payouts` | `rebuildBlockHeader(share)` (header from stratum fields, block or not), `verifyBlock(block, { chain, payToScript })` (best chain, confirmations, coinbase, payee), and the engine `verifyPayout(address, { shares, ledger, chain, ownerMnemonic, sharePercent })`: pays a visitor `sharePercent` of each block they provably found, once; `payoutAll`; the `ShareStore` / `PayoutLedger` interfaces and `memoryStores()` |
 | `cpuminer-opt-js/bridge` | `createBridge` (Node; or attached to your own `node:http` server with `server`), `createWorkerBridge` (Cloudflare Workers: pass `connect` from `cloudflare:sockets`), and `createShareAuditor({ poolUser, onShare })`, the interceptor that logs every connection in to the pool as `poolUser` and records each share before forwarding it |
 
@@ -171,8 +171,8 @@ Upstream bugs found and fixed in the process (all in `native/patches/patches.mjs
 Separately, upstream's own ARM builds produce wrong sha256t and scryptn2 hashes
 (confirmed against independent references); this port follows the x86 paths.
 
-Test suite: 422 Node tests (278 of them golden: 92 cases × 3 variants + reference checks)
-and 16 headless-Chromium tests, including mining Bitcoin block 1 from a browser page
+Test suite: 468 Node tests (278 of them golden: 92 cases × 3 variants + reference checks)
+and 18 headless-Chromium tests, including mining Bitcoin block 1 from a browser page
 through the bridge to a mock pool, and the WebGPU kernel on SwiftShader.
 
 ## Performance (one machine, for orientation)

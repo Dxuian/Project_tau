@@ -1,5 +1,6 @@
-// Wallets: BIP39 words -> BIP84 (native SegWit, bc1q...) first receive address,
-// the same address Sparrow and other BIP84 wallets derive. Entirely offline.
+// Wallets: BIP39 words -> BIP84 (native SegWit, bc1q...) receive addresses
+// (index 0 first, newAddress for the ones after it), the same addresses Sparrow
+// and other BIP84 wallets derive. Entirely offline.
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { HDKey } from '@scure/bip32';
@@ -11,11 +12,13 @@ type BtcNetwork = typeof btc.NETWORK;
 
 const REGTEST: BtcNetwork = Object.freeze({ bech32: 'bcrt', pubKeyHash: 0x6f, scriptHash: 0xc4, wif: 0xef });
 const NETWORKS: Record<NetworkName, BtcNetwork> = { mainnet: btc.NETWORK, testnet: btc.TEST_NETWORK, regtest: REGTEST };
-const PATHS: Record<NetworkName, string> = {
-  mainnet: "m/84'/0'/0'/0/0",
-  testnet: "m/84'/1'/0'/0/0",
-  regtest: "m/84'/1'/0'/0/0",
+// BIP84 account 0; receive addresses are <account>/0/<index>.
+const ACCOUNTS: Record<NetworkName, string> = {
+  mainnet: "m/84'/0'/0'",
+  testnet: "m/84'/1'/0'",
+  regtest: "m/84'/1'/0'",
 };
+const MAX_INDEX = 2 ** 31 - 1; // higher indexes are hardened, which receive addresses aren't
 
 /** btc-signer network parameters; throws on an unknown name. */
 export function bitcoinNetwork(name: string = 'mainnet'): BtcNetwork {
@@ -52,12 +55,20 @@ export interface DerivedKey {
   privateKey: Uint8Array;
 }
 
-/** Derives the first BIP84 key of a wallet. Internal: callers outside the library get addresses only. */
-export function deriveKey(mnemonic: string, network: NetworkName = 'mainnet', passphrase = ''): DerivedKey {
-  const words = String(mnemonic ?? '').trim().toLowerCase().split(/\s+/).join(' ');
+function normalizeWords(mnemonic: string): string {
+  return String(mnemonic ?? '').trim().toLowerCase().split(/\s+/).join(' ');
+}
+
+/**
+ * Derives a BIP84 receive key of a wallet (index 0 is its first address).
+ * Internal: callers outside the library get addresses only.
+ */
+export function deriveKey(mnemonic: string, network: NetworkName = 'mainnet', passphrase = '', index = 0): DerivedKey {
+  const words = normalizeWords(mnemonic);
   if (!validateMnemonic(words, wordlist)) throw new Error('invalid mnemonic (unknown word or bad checksum)');
+  if (!Number.isSafeInteger(index) || index < 0 || index > MAX_INDEX) throw new Error(`index must be a whole number from 0 to ${MAX_INDEX}`);
   const net = bitcoinNetwork(network);
-  const path = PATHS[network];
+  const path = `${ACCOUNTS[network]}/0/${index}`;
   const key = HDKey.fromMasterSeed(mnemonicToSeedSync(words, passphrase)).derive(path);
   if (!key.publicKey || !key.privateKey) throw new Error('key derivation failed');
   const payment = btc.p2wpkh(key.publicKey, net);
@@ -71,6 +82,8 @@ export interface Wallet {
   address: string;
   path: string;
   network: NetworkName;
+  /** Which of the wallet's receive addresses `address` is: 0 is the first. */
+  index: number;
 }
 
 /**
@@ -82,7 +95,26 @@ export function createWallet({ words = 12, network = 'mainnet' }: { words?: 12 |
   bitcoinNetwork(network);
   const mnemonic = generateMnemonic(wordlist, words === 12 ? 128 : 256);
   const { address, path } = deriveKey(mnemonic, network);
-  return { mnemonic, address, path, network };
+  return { mnemonic, address, path, network, index: 0 };
+}
+
+/**
+ * Another receive address of the same wallet: the one after `wallet.index`, or
+ * the one at `index`. Returns the wallet at that address; pass it to the next
+ * call to get the address after it (the library remembers nothing, so the same
+ * wallet always gives the same address). Offline. Any BIP84 wallet restored
+ * from the words finds what these addresses receive, within its gap limit
+ * (usually 20 unused addresses in a row). Wallets with a BIP39 passphrase
+ * aren't supported.
+ */
+export function newAddress(
+  wallet: Pick<Wallet, 'mnemonic'> & Partial<Pick<Wallet, 'network' | 'index'>>,
+  { index }: { index?: number } = {},
+): Wallet {
+  const network = wallet.network ?? 'mainnet';
+  const next = index ?? (wallet.index ?? 0) + 1;
+  const { address, path } = deriveKey(wallet.mnemonic, network, '', next);
+  return { mnemonic: normalizeWords(wallet.mnemonic), address, path, network, index: next };
 }
 
 /** The address of an existing wallet (checks the words and their checksum). */

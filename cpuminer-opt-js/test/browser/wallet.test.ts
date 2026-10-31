@@ -44,6 +44,10 @@ test('creates and restores wallets in the browser', { skip: !BUILT && 'run ./dev
     await page.evaluate((m) => (window as any).T.wallet.walletFromMnemonic(m).address, abandon),
     'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu',
   );
+  assert.equal(
+    await page.evaluate((m) => (window as any).T.wallet.newAddress({ mnemonic: m }).address, abandon),
+    'bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g',
+  );
   assert.equal(await page.evaluate(() => (window as any).T.wallet.isValidAddress('nope')), false);
 });
 
