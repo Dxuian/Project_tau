@@ -33,7 +33,10 @@ for (const v of builtVariants()) {
       const target = new Uint32Array(8).fill(0xffffffff);
       target[7] = 0x0fffffff;
       let checked = 0;
-      for (let t = 0; t < a.headers; t++) {
+      // Headers are random, and at this target a nonce solves with p = 1/16, so a
+      // header can come up empty (scrypt:1048576, 32 nonces: 12.7%). Keep going
+      // (up to 8x the planned headers) until some solution was checked.
+      for (let t = 0; t < a.headers || (checked === 0 && t < a.headers * 8); t++) {
         const rnd = randomBytes(80);
         const words = new Uint32Array(20);
         for (let i = 0; i < 20; i++) words[i] = rnd.readUInt32BE(i * 4);
