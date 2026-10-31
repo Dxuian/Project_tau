@@ -5,7 +5,14 @@ import assert from 'node:assert/strict';
 import { connect, type Socket } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { EXAMPLE_JOB, MockPool } from './mock-pool.ts';
-import { createBridge, parseBridgeArgs, runBridgeCli, type Bridge, type BridgeOptions } from '../bridge/server.ts';
+import {
+  createBridge,
+  parseBridgeArgs,
+  runBridgeCli,
+  type Bridge,
+  type BridgeConnection,
+  type BridgeOptions,
+} from '../bridge/server.ts';
 import { createStratumClient } from '../src/stratum/index.ts';
 import type { StratumClient } from '../src/types.ts';
 
@@ -482,6 +489,105 @@ test('close() ends every connection', async (t) => {
 });
 
 // -------------------------------------------------------------------- CLI
+
+// ---------------------------------------------------------------- intercept
+
+test('intercept: rewrites, drops and answers lines in both directions', async (t) => {
+  let info: BridgeConnection | undefined;
+  let closes = 0;
+  const { pool, bridge } = await setup(t, {
+    intercept: (c) => {
+      info = c;
+      return {
+        fromClient(line) {
+          const msg = JSON.parse(line);
+          if (msg.method === 'mining.authorize') {
+            msg.params[0] = 'owner';
+            return JSON.stringify(msg);
+          }
+          if (msg.method === 'blocked') {
+            c.reply(JSON.stringify({ id: msg.id, result: null, error: [20, 'not allowed', null] }));
+            return null;
+          }
+          return line;
+        },
+        fromPool: (line) => (line.includes('mining.set_difficulty') ? null : line),
+        onClose: () => closes++,
+      };
+    },
+  });
+  const ws = await RawWs.upgraded(bridge.port, `${targetPath(pool.target)}&client=abc`);
+  assert.equal(info?.query.get('client'), 'abc');
+  assert.equal(info?.target, pool.target);
+  assert.equal(info?.tls, false);
+  // Two lines in one message: each goes through the interceptor on its own.
+  ws.send(
+    OP.text,
+    '{"id":1,"method":"mining.subscribe","params":[]}\n{"id":2,"method":"mining.authorize","params":["visitor","x"]}',
+  );
+  await pool.waitForMethod('mining.authorize');
+  assert.deepEqual(pool.messages('mining.authorize')[0].params, ['owner', 'x']);
+  ws.send(OP.text, '{"id":3,"method":"blocked","params":[]}');
+  const reply = await ws.next((f) => f.payload.toString().includes('not allowed'));
+  assert.deepEqual(JSON.parse(reply.payload.toString()), { id: 3, result: null, error: [20, 'not allowed', null] });
+  assert.equal(pool.messages('blocked').length, 0);
+  pool.setDifficulty(5);
+  pool.notify(EXAMPLE_JOB);
+  const texts: string[] = [];
+  await ws.next((f) => {
+    texts.push(f.payload.toString());
+    return f.payload.toString().includes('mining.notify');
+  });
+  assert.ok(!texts.some((x) => x.includes('mining.set_difficulty')), 'the pool line was dropped');
+  ws.send(OP.close, Buffer.from([0x03, 0xe8]));
+  await ws.closed;
+  await until(() => closes === 1);
+});
+
+test('intercept: null refuses with 403, a throw with 500, a throwing filter closes with 1011', async (t) => {
+  let mode: 'null' | 'throw' | 'filter' = 'null';
+  let closes = 0;
+  const { pool, bridge } = await setup(t, {
+    intercept: () => {
+      if (mode === 'null') return null;
+      if (mode === 'throw') throw new Error('boom');
+      return {
+        fromClient: () => {
+          throw new Error('bad line');
+        },
+        onClose: () => closes++,
+      };
+    },
+  });
+  assert.equal((await (await RawWs.open(bridge.port, targetPath(pool.target))).response).status, 403);
+  mode = 'throw';
+  assert.equal((await (await RawWs.open(bridge.port, targetPath(pool.target))).response).status, 500);
+  mode = 'filter';
+  const ws = await RawWs.upgraded(bridge.port, targetPath(pool.target));
+  ws.send(OP.text, '{"id":1,"method":"mining.subscribe","params":[]}');
+  assert.equal(await ws.closeCode(), 1011);
+  await ws.closed;
+  await until(() => closes === 1);
+  assert.equal(pool.messages('mining.subscribe').length, 0);
+});
+
+test('intercept: close() ends the connection with 1008 and a multi-line result fails it', async (t) => {
+  let conn: BridgeConnection | undefined;
+  const { pool, bridge } = await setup(t, {
+    intercept: (c) => {
+      conn = c;
+      return { fromClient: (line) => (line.includes('two') ? 'a\nb' : line) };
+    },
+  });
+  const ws = await RawWs.upgraded(bridge.port, targetPath(pool.target));
+  conn!.close('bye');
+  assert.equal(await ws.closeCode(), 1008);
+  await ws.closed;
+  const ws2 = await RawWs.upgraded(bridge.port, targetPath(pool.target));
+  ws2.send(OP.text, '{"id":1,"method":"two"}');
+  assert.equal(await ws2.closeCode(), 1011);
+  assert.equal(pool.messages('two').length, 0);
+});
 
 test('parseBridgeArgs reads the CLI options', () => {
   assert.deepEqual(

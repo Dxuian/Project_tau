@@ -18,7 +18,46 @@ export interface BridgeOptions {
   /** Accept any certificate from pools reached with tls=1. Default false. */
   tlsInsecure?: boolean;
   log?: (line: string) => void;
+  /**
+   * Called for each connection after the target and origin checks; the returned
+   * interceptor sees (and may rewrite or drop) every stratum line in both
+   * directions. Returning null refuses the connection with 403. Without it, the
+   * bridge relays messages unchanged.
+   */
+  intercept?: (connection: BridgeConnection) => BridgeInterceptor | null;
 }
+
+/** One WebSocket connection, as seen by an interceptor. */
+export interface BridgeConnection {
+  /** Unique per bridge, increasing. */
+  id: number;
+  /** The client's address and port. */
+  peer: string;
+  /** The pool, as host:port. */
+  target: string;
+  tls: boolean;
+  origin: string | null;
+  /** Query parameters of the WebSocket URL. */
+  query: URLSearchParams;
+  /** Sends one line to the client (ignored before it is connected or once it is closing). */
+  reply(line: string): void;
+  /** Closes the WebSocket (code 1008) and the pool connection. */
+  close(reason?: string): void;
+}
+
+/**
+ * Each method gets one line without its newline and returns the line to pass on,
+ * or null to drop it. A throw closes the connection.
+ */
+export interface BridgeInterceptor {
+  fromClient?(line: string): string | null;
+  fromPool?(line: string): string | null;
+  /** The connection has ended (called once). */
+  onClose?(): void;
+}
+
+/** Optional capabilities of this bridge, for callers that depend on them. */
+export const BRIDGE_FEATURES: readonly string[] = Object.freeze(['intercept']);
 
 export interface Bridge {
   /** The port actually bound. */
@@ -266,6 +305,7 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
   );
   const sockets = new Set<any>(); // client and pool sockets, destroyed by close()
   let active = 0;
+  let nextId = 1;
 
   const track = (socket: any) => {
     sockets.add(socket);
@@ -326,6 +366,40 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
     if (tlsFlag !== '0' && tlsFlag !== '1') return refuse(400, 'tls must be 0 or 1');
     if (active >= maxConnections) return refuse(503, 'too many connections');
 
+    // The connection's reply/close work once accept() has run.
+    const link: { reply: (line: string) => void; close: (reason?: string) => void } = {
+      reply: () => {},
+      close: () => socket.destroy(),
+    };
+    let interceptor: BridgeInterceptor | null = null;
+    if (options.intercept) {
+      const connection: BridgeConnection = {
+        id: nextId++,
+        peer,
+        target: formatHostPort(target.host, target.port),
+        tls: tlsFlag === '1',
+        origin: headers.origin === undefined ? null : String(headers.origin),
+        query,
+        reply: (line) => link.reply(line),
+        close: (reason) => link.close(reason),
+      };
+      try {
+        interceptor = options.intercept(connection);
+      } catch (err) {
+        log(`${peer}: interceptor failed: ${(err as Error).message}`);
+        return refuse(500, 'internal error');
+      }
+      if (!interceptor) return refuse(403, 'connection refused');
+      const accepted = interceptor;
+      socket.once('close', () => {
+        try {
+          accepted.onClose?.();
+        } catch (err) {
+          log(`${peer}: interceptor onClose failed: ${(err as Error).message}`);
+        }
+      });
+    }
+
     active++;
     socket.once('close', () => active--);
     const label = `${formatHostPort(target.host, target.port)}${tlsFlag === '1' ? ' (TLS)' : ''}`;
@@ -349,7 +423,7 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
     const onReady = () => {
       cleanup();
       if (socket.destroyed) pool.destroy();
-      else accept(socket, head, key, pool, () => poolError, peer, label);
+      else accept(socket, head, key, pool, () => poolError, peer, label, interceptor, link);
     };
     const onPoolFailed = () => {
       cleanup();
@@ -379,6 +453,8 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
     poolError: () => Error | undefined,
     peer: string,
     label: string,
+    interceptor: BridgeInterceptor | null,
+    link: { reply: (line: string) => void; close: (reason?: string) => void },
   ): void {
     const acceptKey = crypto.createHash('sha1').update(key + WS_GUID).digest('base64');
     socket.write(
@@ -425,6 +501,32 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
       closeWs(code, reason);
       socket.end();
     };
+    // Runs an interceptor method; a throw or a multi-line result fails the connection.
+    const filter = (fn: ((line: string) => string | null) | undefined, line: string): string | null => {
+      if (!fn) return line;
+      let out: string | null;
+      try {
+        out = fn.call(interceptor, line);
+      } catch (err) {
+        fail(1011, `interceptor error: ${(err as Error).message}`);
+        return null;
+      }
+      if (out !== null && /[\r\n]/.test(out)) {
+        fail(1011, 'interceptor returned more than one line');
+        return null;
+      }
+      return out;
+    };
+    link.reply = (line) => {
+      if (!closeReceived) sendFrame(OP_TEXT, utf8.encode(line));
+    };
+    link.close = (reason = 'closed by the bridge') => {
+      log(`${peer}: ${reason}`);
+      closeReceived = true;
+      endPool();
+      closeWs(1008, reason);
+      socket.end();
+    };
 
     // pool -> client: one text frame per line
     let poolPaused = false;
@@ -438,7 +540,9 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
         closeWs(1009, 'pool line too long');
         return;
       }
-      for (const line of received) {
+      for (const raw of received) {
+        const line = interceptor ? filter(interceptor.fromPool, raw) : raw;
+        if (line === null) continue;
         if (!sendFrame(OP_TEXT, utf8.encode(line)) && !poolPaused) {
           poolPaused = true;
           pool.pause();
@@ -482,7 +586,25 @@ export async function createBridge(options: BridgeOptions): Promise<Bridge> {
             fail(1007, 'invalid UTF-8 in a text message');
             return;
           }
-          const line = closeSent ? null : asLine(message.payload);
+          if (closeSent) continue;
+          if (interceptor) {
+            // Every line of the message passes the interceptor on its own.
+            let text: string;
+            try {
+              text = strictUtf8.decode(message.payload);
+            } catch {
+              fail(1007, 'invalid UTF-8 in a message');
+              return;
+            }
+            for (const raw of text.split(/\r?\n/)) {
+              if (!raw.trim()) continue;
+              const out = filter(interceptor.fromClient, raw);
+              if (closeReceived) return;
+              if (out !== null) toPool(utf8.encode(`${out}\n`));
+            }
+            continue;
+          }
+          const line = asLine(message.payload);
           if (line) toPool(line);
         } else if (message.opcode === OP_PING) {
           sendFrame(OP_PONG, message.payload);

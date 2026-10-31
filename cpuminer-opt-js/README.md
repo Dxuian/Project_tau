@@ -117,7 +117,9 @@ startButton.onclick = () => miner.start();
 ```
 
 The bridge only connects to allowlisted `host:port` targets, so it can't be used as an
-open proxy. In browsers the miner pauses while the page is hidden (`pauseWhenHidden`).
+open proxy. `createBridge({ intercept })` (from `cpuminer-opt-js/bridge`) lets a server see,
+rewrite or drop every stratum line of each connection and reply to the client; the payout
+bridge in `../btc.js` uses it to audit shares (`BRIDGE_FEATURES` lists it). In browsers the miner pauses while the page is hidden (`pauseWhenHidden`).
 `examples/browser/index.html` is a demo page (serve the project folder and open it).
 
 ## Verification

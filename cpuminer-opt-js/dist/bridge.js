@@ -6,6 +6,7 @@ import {
 } from "./chunks/chunk-4FZYJI2W.js";
 
 // bridge/server.ts
+var BRIDGE_FEATURES = Object.freeze(["intercept"]);
 var WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 var OP_CONTINUATION = 0;
 var OP_TEXT = 1;
@@ -211,6 +212,7 @@ async function createBridge(options) {
   );
   const sockets = /* @__PURE__ */ new Set();
   let active = 0;
+  let nextId = 1;
   const track = (socket) => {
     sockets.add(socket);
     socket.on("error", () => {
@@ -266,6 +268,39 @@ async function createBridge(options) {
     const tlsFlag = query.get("tls") ?? "0";
     if (tlsFlag !== "0" && tlsFlag !== "1") return refuse(400, "tls must be 0 or 1");
     if (active >= maxConnections) return refuse(503, "too many connections");
+    const link = {
+      reply: () => {
+      },
+      close: () => socket.destroy()
+    };
+    let interceptor = null;
+    if (options.intercept) {
+      const connection = {
+        id: nextId++,
+        peer,
+        target: formatHostPort(target.host, target.port),
+        tls: tlsFlag === "1",
+        origin: headers.origin === void 0 ? null : String(headers.origin),
+        query,
+        reply: (line) => link.reply(line),
+        close: (reason) => link.close(reason)
+      };
+      try {
+        interceptor = options.intercept(connection);
+      } catch (err) {
+        log(`${peer}: interceptor failed: ${err.message}`);
+        return refuse(500, "internal error");
+      }
+      if (!interceptor) return refuse(403, "connection refused");
+      const accepted = interceptor;
+      socket.once("close", () => {
+        try {
+          accepted.onClose?.();
+        } catch (err) {
+          log(`${peer}: interceptor onClose failed: ${err.message}`);
+        }
+      });
+    }
     active++;
     socket.once("close", () => active--);
     const label = `${formatHostPort(target.host, target.port)}${tlsFlag === "1" ? " (TLS)" : ""}`;
@@ -286,7 +321,7 @@ async function createBridge(options) {
     const onReady = () => {
       cleanup();
       if (socket.destroyed) pool.destroy();
-      else accept(socket, head, key, pool, () => poolError, peer, label);
+      else accept(socket, head, key, pool, () => poolError, peer, label, interceptor, link);
     };
     const onPoolFailed = () => {
       cleanup();
@@ -306,7 +341,7 @@ async function createBridge(options) {
     pool.on("close", onPoolFailed);
     socket.on("close", onClientGone);
   });
-  function accept(socket, head, key, pool, poolError, peer, label) {
+  function accept(socket, head, key, pool, poolError, peer, label, interceptor, link) {
     const acceptKey = crypto.createHash("sha1").update(key + WS_GUID).digest("base64");
     socket.write(
       [
@@ -347,6 +382,31 @@ async function createBridge(options) {
       closeWs(code, reason);
       socket.end();
     };
+    const filter = (fn, line) => {
+      if (!fn) return line;
+      let out;
+      try {
+        out = fn.call(interceptor, line);
+      } catch (err) {
+        fail(1011, `interceptor error: ${err.message}`);
+        return null;
+      }
+      if (out !== null && /[\r\n]/.test(out)) {
+        fail(1011, "interceptor returned more than one line");
+        return null;
+      }
+      return out;
+    };
+    link.reply = (line) => {
+      if (!closeReceived) sendFrame(OP_TEXT, utf8.encode(line));
+    };
+    link.close = (reason = "closed by the bridge") => {
+      log(`${peer}: ${reason}`);
+      closeReceived = true;
+      endPool();
+      closeWs(1008, reason);
+      socket.end();
+    };
     let poolPaused = false;
     pool.on("data", (chunk) => {
       let received;
@@ -358,7 +418,9 @@ async function createBridge(options) {
         closeWs(1009, "pool line too long");
         return;
       }
-      for (const line of received) {
+      for (const raw of received) {
+        const line = interceptor ? filter(interceptor.fromPool, raw) : raw;
+        if (line === null) continue;
         if (!sendFrame(OP_TEXT, utf8.encode(line)) && !poolPaused) {
           poolPaused = true;
           pool.pause();
@@ -400,7 +462,25 @@ async function createBridge(options) {
             fail(1007, "invalid UTF-8 in a text message");
             return;
           }
-          const line = closeSent ? null : asLine(message.payload);
+          if (closeSent) continue;
+          if (interceptor) {
+            let text;
+            try {
+              text = strictUtf8.decode(message.payload);
+            } catch {
+              fail(1007, "invalid UTF-8 in a message");
+              return;
+            }
+            for (const raw of text.split(/\r?\n/)) {
+              if (!raw.trim()) continue;
+              const out = filter(interceptor.fromClient, raw);
+              if (closeReceived) return;
+              if (out !== null) toPool(utf8.encode(`${out}
+`));
+            }
+            continue;
+          }
+          const line = asLine(message.payload);
           if (line) toPool(line);
         } else if (message.opcode === OP_PING) {
           sendFrame(OP_PONG, message.payload);
@@ -544,6 +624,7 @@ async function runBridgeCli(argv) {
   });
 }
 export {
+  BRIDGE_FEATURES,
   BRIDGE_USAGE,
   createBridge,
   parseBridgeArgs,
