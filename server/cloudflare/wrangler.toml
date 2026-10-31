@@ -13,12 +13,17 @@
 name = "project-tau"
 main = "worker.js"
 compatibility_date = "2026-07-30"
+# Served on project-tau.deathxunnat.workers.dev only: no per-version preview URLs,
+# which would keep every old version of the payout service, secrets included, reachable.
+workers_dev = true
+preview_urls = false
 
 [vars]
 TAU_TARGET = "cloudflare"
 TAU_NETWORK = "mainnet"
 TAU_POOL = "stratum+tcp://solo.ckpool.org:3333"
-TAU_OWNER_ADDRESS = "REPLACE_WITH_YOUR_OWNER_ADDRESS"
+# The owner wallet's first address (index 0): the Worker refuses to start unless OWNER_MNEMONIC derives it.
+TAU_OWNER_ADDRESS = "bc1qq8fcezj49xa69svxfd3k40czcymyqvhqwv74sz"
 # A fresh owner address for visitors every hour (receive index 1 + hours since the epoch); "0": always TAU_OWNER_ADDRESS.
 TAU_ADDRESS_PERIOD_MS = "3600000"
 TAU_ADDRESS_EPOCH = "2026-01-01T00:00:00Z"
