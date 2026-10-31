@@ -155,6 +155,27 @@ The bridge doesn't do TLS itself, so for `wss://` put it behind nginx or Caddy.
 - Deploy command: `npm run cf:deploy`.
 - It needs no secrets.
 
+## Alerts
+
+`.github/workflows/alerts.yml` runs every 15 minutes on GitHub. Each check that fails opens an issue labelled `alert`. The title names the cause and the issue mentions the repo owner, so GitHub notifies them once, by email and in the GitHub app. The issue closes itself, with a comment, when the check passes again.
+
+| Check | Alert |
+|---|---|
+| the payout Worker's `/health` answers `ok` | the payout service is down |
+| `/health` says `canPay` | the payout service can't pay (`OWNER_MNEMONIC` missing or wrong) |
+| the site's home page loads | the website is down |
+| the site's `/api/address` answers | the website can't reach the payout service |
+| PostHog¹: `blocks_seen` in the last 20 minutes | a visitor's miner found a block |
+| PostHog¹: `$exception` | errors in visitors' browsers |
+| PostHog¹: `mining_unavailable` | visitors saw "mining unavailable" |
+| PostHog¹: over 10 `mining_error` | mining errors |
+
+¹ With the repository secret `POSTHOG_READ_KEY`, a PostHog personal API key with only the `query:read` scope, on the project. Without it these are skipped. A bad key opens "the PostHog check can't run".
+
+The repository is public, so these issues and the workflow's logs are too. They hold causes and counts only. To see what an alert looks like, run the workflow from the Actions tab with "test" ticked; the next run closes the test alert.
+
+PostHog itself has one alert, "Project Tau: needs a look", on the same signals, hourly. The free plan allows 5 per project. Dependabot and secret scanning alerts are repository settings, which only the owner can turn on (Settings, in its Security section).
+
 ## How a win is verified
 
 Nothing a visitor says is trusted.

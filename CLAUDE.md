@@ -4,7 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Layout (keep it: two folders)
 
-The top level holds only `tau-crypto/` (the library), `server/` (everything deployed, with its tests and tooling), `README.md`, `CLAUDE.md`, `docker-compose.yml` (server/'s containers) and `.gitignore`. Don't add top-level folders or files; there is no upstream clone. `tau-crypto/dev vendor` fetches the pinned cpuminer-opt into the library's cache volume.
+The top level holds only these; don't add top-level folders or files:
+- `tau-crypto/` (the library);
+- `server/` (everything deployed, with its tests and tooling);
+- `.github/` (the Alerts workflow and its script; the owner approved it);
+- `README.md`, `CLAUDE.md`, `docker-compose.yml` (server/'s containers) and `.gitignore`.
+
+There is no upstream clone. `tau-crypto/dev vendor` fetches the pinned cpuminer-opt into the library's cache volume.
+
+## Alerts (`.github/`)
+
+`.github/workflows/alerts.yml` runs `.github/scripts/alerts.sh` every 15 minutes on GitHub's runners (not this machine).
+- **What it checks:** the payout Worker's `/health` (`ok`, `canPay`), the site's home page and `/api/address`. With the `POSTHOG_READ_KEY` secret (a read-only PostHog personal key), it also counts, in the last 20 minutes, `blocks_seen`, `$exception` and `mining_unavailable`, and `mining_error` over 10.
+- **How it alerts:** each failing check keeps one open issue labelled `alert`, keyed by an `<!-- alert:id -->` marker. The issue mentions the repo owner, because scheduled-run emails go to whoever pushed the cron line (`unnat-bharol`, not the owner `Dxuian`). It closes with a comment once the check passes. The run fails only when it can't manage the issues.
+- **Public:** the repo is public, so its issues and Actions logs are too. Write causes and counts only, never event contents.
+- **Trying it:** `DRY_RUN=1` prints the issue operations instead of running them. A manual run with `test` ticked opens a test alert, which the next run closes. Lint with actionlint and shellcheck (in Docker).
 
 ## Rules
 

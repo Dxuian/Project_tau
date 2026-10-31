@@ -1,0 +1,41 @@
+# Project Tau's alerts. Every 15 minutes .github/scripts/alerts.sh checks the
+# payout service, the website and, with the POSTHOG_READ_KEY secret, what
+# visitors' pages reported to PostHog. It keeps one GitHub issue (label "alert")
+# open per failing check, mentioning the repo owner, and closes it once the
+# check passes. Run it by hand from the Actions tab; tick "test" to open a test
+# alert, which the next run closes.
+name: Alerts
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      test:
+        description: Open a test alert (the next run closes it)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: alerts
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github
+          persist-credentials: false
+      - name: Check, then open or close alert issues
+        run: bash .github/scripts/alerts.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POSTHOG_READ_KEY: ${{ secrets.POSTHOG_READ_KEY }}
+          TEST_ALERT: ${{ inputs.test }}
