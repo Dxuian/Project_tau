@@ -1,8 +1,8 @@
 // Shared test helpers: a mock chain, an easy synthetic block, regtest access.
 import { createHash } from 'node:crypto';
 import { mineBTC } from '../tau-crypto/dist/index.js';
-import { rebuildBlockHeader } from '../tau-crypto/dist/payouts.js';
-import { addressScript, bitcoinCore } from '../tau-crypto/dist/wallet.js';
+import { addressSlot, rebuildBlockHeader } from '../tau-crypto/dist/payouts.js';
+import { addressScript, bitcoinCore, newAddress } from '../tau-crypto/dist/wallet.js';
 
 export const OWNER_WORDS = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 export const OWNER = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
@@ -145,4 +145,22 @@ export async function mineBlocks(address, bridgeUrl, pool, count = 1) {
 export async function ownerReward(core, blockHash, address) {
   const cb = (await core.rpc('getblock', [blockHash, 2])).tx[0];
   return cb.vout.filter((o) => o.scriptPubKey.address === address).reduce((sum, o) => sum + BigInt(Math.round(o.value * 1e8)), 0n);
+}
+
+/** End-to-end settings: a fresh owner address every 2 s, so successive mining sessions use different ones. */
+export const FAST_SLOTS = Object.freeze({ TAU_ADDRESS_PERIOD_MS: '2000', TAU_ADDRESS_EPOCH: '2026-01-01T00:00:00Z' });
+const FAST = { periodMs: 2000, epochMs: Date.parse(FAST_SLOTS.TAU_ADDRESS_EPOCH) };
+export const currentSlot = (time = Date.now()) => addressSlot(time, FAST);
+
+/** The owner wallet's addresses handed out between `from` and `to` (FAST_SLOTS): address -> receive index. */
+export function slotAddresses(owner, from, to = Date.now()) {
+  const out = new Map();
+  for (let index = currentSlot(from); index <= currentSlot(to); index++) out.set(newAddress(owner, { index }).address, index);
+  return out;
+}
+
+/** Waits until the next FAST_SLOTS slot has started. */
+export async function nextSlot() {
+  const now = currentSlot();
+  await until(() => currentSlot() > now, 5000, 'the next address slot');
 }

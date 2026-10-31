@@ -13,9 +13,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Miniflare } from 'miniflare';
-import { createWallet } from '../tau-crypto/dist/wallet.js';
+import { accountXpub, createWallet, newAddress } from '../tau-crypto/dist/wallet.js';
 import { startRegtestPool } from './regtest-pool.js';
-import { mineBlocks, nodeReady, ownerReward, regtest, regtestChainEnv } from './helpers.js';
+import { FAST_SLOTS, mineBlocks, nodeReady, ownerReward, regtest, regtestChainEnv, slotAddresses } from './helpers.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const core = regtest();
@@ -73,6 +73,7 @@ async function closedPort() {
 test("the Worker's Cloudflare glue in workerd: origin and target refusals, 502 for an unreachable pool", async (t) => {
   const { out } = bundleWorker(t);
   const port = await closedPort();
+  const owner = createWallet({ network: 'regtest' });
   const mf = new Miniflare({
     modules: true,
     scriptPath: join(out, 'worker.js'),
@@ -85,7 +86,9 @@ test("the Worker's Cloudflare glue in workerd: origin and target refusals, 502 f
       TAU_TARGET: 'cloudflare',
       TAU_NETWORK: 'regtest',
       TAU_POOL: `stratum+tcp://127.0.0.1:${port}`,
-      TAU_OWNER_ADDRESS: createWallet({ network: 'regtest' }).address,
+      TAU_OWNER_ADDRESS: owner.address,
+      // Record-only: the xpub hands out the hourly addresses; without the words nothing is paid.
+      TAU_OWNER_XPUB: accountXpub(owner.mnemonic, { network: 'regtest' }),
       TAU_STORAGE: 'd1',
       TAU_ORIGINS: 'https://site.example',
     },
@@ -103,7 +106,7 @@ test("the Worker's Cloudflare glue in workerd: origin and target refusals, 502 f
   assert.equal(health.canPay, false, 'no OWNER_MNEMONIC: records only');
 });
 
-test('Cloudflare target: a visitor finds a block through the Worker and is paid 10%, once', { skip: !core && 'BITCOIND_RPC not set (run ./dev test)', timeout: 300_000 }, async (t) => {
+test('Cloudflare target: a visitor mines to a fresh owner address through the Worker and is paid 10%, once', { skip: !core && 'BITCOIND_RPC not set (run ./dev test)', timeout: 300_000 }, async (t) => {
   await nodeReady(core);
   const { out } = bundleWorker(t);
   const owner = createWallet({ network: 'regtest' });
@@ -129,7 +132,10 @@ test('Cloudflare target: a visitor finds a block through the Worker and is paid 
       TAU_STORAGE: 'd1',
       TAU_D1_BINDING: 'DB',
       TAU_CLIENT_SHARE_PERCENT: '10',
+      ...FAST_SLOTS,
       ...regtestChainEnv(),
+      // The slot addresses come from the xpub; only paying needs the words.
+      TAU_OWNER_XPUB: accountXpub(owner.mnemonic, { network: 'regtest' }),
       OWNER_MNEMONIC: owner.mnemonic,
     },
   });
@@ -143,13 +149,22 @@ test('Cloudflare target: a visitor finds a block through the Worker and is paid 
   const health = await (await mf.dispatchFetch('http://worker.local/health')).json();
   assert.equal(health.target, 'cloudflare');
   assert.equal(health.canPay, true);
+  const shown = await (await mf.dispatchFetch('http://worker.local/address')).json();
+  assert.equal(shown.address, newAddress(owner, { index: shown.index }).address);
 
+  const t0 = Date.now();
   const blocks = await mineBlocks(visitor.address, `ws://127.0.0.1:${url.port}`, pool);
-  assert.ok(pool.authorized.every((u) => u === owner.address), 'the Worker logged the visitor in as the owner');
-  // The share records are in D1.
+  const ours = slotAddresses(owner, t0);
+  assert.ok(pool.authorized.every((u) => ours.has(u)), "the Worker logged the visitor in as the owner's slot address");
+  // The share records are in D1, with the slot they were mined in.
   const db = await mf.getD1Database('DB');
-  const rows = (await db.prepare('SELECT visitor, block_hash FROM shares WHERE is_block = 1').all()).results;
-  for (const b of blocks) assert.ok(rows.some((r) => r.block_hash === b.hash && r.visitor === visitor.address), `D1 has ${b.hash}`);
+  const rows = (await db.prepare('SELECT visitor, block_hash, record FROM shares WHERE is_block = 1').all()).results;
+  for (const b of blocks) {
+    const row = rows.find((r) => r.block_hash === b.hash && r.visitor === visitor.address);
+    assert.ok(row, `D1 has ${b.hash}`);
+    const record = JSON.parse(row.record);
+    assert.deepEqual([record.poolUser, record.ownerIndex], [b.user, ours.get(b.user)]);
+  }
 
   assert.ok((await payout()).every((r) => r.status !== 'paid'), 'not mature yet');
   await core.rpc('generatetoaddress', [100, other]);
@@ -157,13 +172,16 @@ test('Cloudflare target: a visitor finds a block through the Worker and is paid 
   const paid = results.filter((r) => r.status === 'paid');
   assert.deepEqual(paid.map((r) => r.blockHash).sort(), blocks.map((b) => b.hash).sort(), JSON.stringify(results));
   let expected = 0n;
+  let change = 0n;
   for (const r of paid) {
-    const reward = await ownerReward(core, r.blockHash, owner.address);
+    const reward = await ownerReward(core, r.blockHash, r.ownerAddress);
     assert.equal(r.payoutSats, String(reward / 10n));
     expected += reward / 10n;
+    change += reward - reward / 10n - BigInt(r.feeSats);
   }
   await core.rpc('generatetoaddress', [1, other]);
-  const coins = await core.utxos(visitor.address);
-  assert.equal(coins.reduce((sum, c) => sum + c.value, 0n), expected);
+  const sum = (coins) => coins.reduce((s, c) => s + c.value, 0n);
+  assert.equal(sum(await core.utxos(visitor.address)), expected);
+  assert.equal(sum(await core.utxos(owner.address)), change, "the owner's 90% is at its first address");
   assert.ok((await payout()).filter((r) => paid.some((p) => p.blockHash === r.blockHash)).every((r) => r.status === 'already-paid'));
 });

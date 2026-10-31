@@ -8,8 +8,14 @@ export const DEFAULTS = Object.freeze({
   target: 'node',
   network: 'mainnet',
   pool: 'stratum+tcp://solo.ckpool.org:3333',
-  /** Required: the address the pool pays (and visitors are logged in as). */
+  /** Required: the owner wallet's first address. Payout change goes here (and every block, with addressPeriodMs 0). */
   ownerAddress: undefined,
+  /** The owner wallet's account public key (accountXpub): derives the hourly addresses without the words. */
+  ownerXpub: undefined,
+  /** A fresh owner address for visitors this often (slot N = receive index N); 0: everyone mines to ownerAddress. */
+  addressPeriodMs: 3_600_000,
+  /** When slot 1 starts (ISO time). */
+  addressEpoch: '2026-01-01T00:00:00Z',
   /** The visitor's share of a block they found, whole percent. */
   clientSharePercent: 10,
   minConfirmations: 100,
@@ -34,7 +40,8 @@ const list = (value) => (value ? String(value).split(',').map((s) => s.trim()).f
 
 /**
  * The service config from environment variables:
- *   TAU_TARGET, TAU_NETWORK, TAU_POOL, TAU_OWNER_ADDRESS, TAU_CLIENT_SHARE_PERCENT,
+ *   TAU_TARGET, TAU_NETWORK, TAU_POOL, TAU_OWNER_ADDRESS, TAU_OWNER_XPUB,
+ *   TAU_ADDRESS_PERIOD_MS, TAU_ADDRESS_EPOCH, TAU_CLIENT_SHARE_PERCENT,
  *   TAU_MIN_CONFIRMATIONS, TAU_MAX_FEE_RATE,
  *   TAU_CHAIN (esplora | bitcoin-core), TAU_CHAIN_URL, TAU_CHAIN_USER, TAU_CHAIN_PASS,
  *   TAU_STORAGE (file | d1 | memory), TAU_STORAGE_DIR, TAU_D1_BINDING,
@@ -49,6 +56,9 @@ export function loadConfig(env = globalThis.process?.env ?? {}, overrides = {}) 
     network: env.TAU_NETWORK ?? DEFAULTS.network,
     pool: env.TAU_POOL ?? DEFAULTS.pool,
     ownerAddress: env.TAU_OWNER_ADDRESS ?? DEFAULTS.ownerAddress,
+    ownerXpub: env.TAU_OWNER_XPUB || DEFAULTS.ownerXpub,
+    addressPeriodMs: int(env.TAU_ADDRESS_PERIOD_MS, DEFAULTS.addressPeriodMs, 'TAU_ADDRESS_PERIOD_MS'),
+    addressEpoch: env.TAU_ADDRESS_EPOCH || DEFAULTS.addressEpoch,
     clientSharePercent: int(env.TAU_CLIENT_SHARE_PERCENT, DEFAULTS.clientSharePercent, 'TAU_CLIENT_SHARE_PERCENT'),
     minConfirmations: int(env.TAU_MIN_CONFIRMATIONS, DEFAULTS.minConfirmations, 'TAU_MIN_CONFIRMATIONS'),
     maxFeeRate: int(env.TAU_MAX_FEE_RATE, DEFAULTS.maxFeeRate, 'TAU_MAX_FEE_RATE'),
@@ -77,6 +87,10 @@ export function validateConfig(c) {
   if (!['mainnet', 'testnet', 'regtest'].includes(c.network)) throw new Error('network must be mainnet, testnet or regtest');
   if (!/^stratum\+(tcp|ssl|tcps):\/\//.test(String(c.pool))) throw new Error('pool must be a stratum+tcp:// or stratum+ssl:// URL');
   if (!isValidAddress(c.ownerAddress, c.network)) throw new Error(`ownerAddress (TAU_OWNER_ADDRESS) must be a ${c.network} Bitcoin address`);
+  if (!Number.isSafeInteger(c.addressPeriodMs) || (c.addressPeriodMs !== 0 && c.addressPeriodMs < 1000)) {
+    throw new Error('addressPeriodMs (TAU_ADDRESS_PERIOD_MS) must be 0 or at least 1000');
+  }
+  if (!Number.isFinite(Date.parse(c.addressEpoch))) throw new Error('addressEpoch (TAU_ADDRESS_EPOCH) must be an ISO time');
   if (!Number.isInteger(c.clientSharePercent) || c.clientSharePercent < 1 || c.clientSharePercent > 100) {
     throw new Error('clientSharePercent must be a whole number from 1 to 100');
   }
@@ -93,4 +107,9 @@ export function validateConfig(c) {
 /** The chain client for config.chain. */
 export function chainFromConfig(chain) {
   return chain.type === 'bitcoin-core' ? bitcoinCore({ url: chain.url, user: chain.user, pass: chain.pass }) : esplora(chain.url);
+}
+
+/** config's address period as the library's SlotOptions, or undefined for one address. */
+export function addressPeriod(config) {
+  return config.addressPeriodMs > 0 ? { periodMs: config.addressPeriodMs, epochMs: Date.parse(config.addressEpoch) } : undefined;
 }

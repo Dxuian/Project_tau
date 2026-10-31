@@ -14,7 +14,7 @@ import { createWallet } from '../tau-crypto/dist/wallet.js';
 import { loadConfig } from '../server/config.js';
 import { startNodeServer } from '../server/node/index.js';
 import { startRegtestPool } from './regtest-pool.js';
-import { nodeReady, regtest, regtestChainEnv, until } from './helpers.js';
+import { FAST_SLOTS, nodeReady, regtest, regtestChainEnv, slotAddresses, until } from './helpers.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const core = regtest();
@@ -85,16 +85,19 @@ test('a page mines a block through the payout bridge and asks for its payout', {
     TAU_LISTEN: '0',
     TAU_HOST: '127.0.0.1',
     TAU_ORIGINS: origin,
+    ...FAST_SLOTS,
     ...regtestChainEnv(),
   });
   const server = await startNodeServer(config, { ownerMnemonic: owner.mnemonic });
   t.after(() => server.close());
 
   const before = pool.found.length;
+  const t0 = Date.now();
   assert.equal(await page.evaluate(([a, b, p]) => window.T.mine(a, b, p), [visitor.address, `ws://127.0.0.1:${server.port}`, pool.url]), 'running');
   await until(() => pool.found.length > before, 120_000, 'a block from the page');
   await page.evaluate(() => window.T.stop());
-  assert.ok(pool.authorized.every((u) => u === owner.address));
+  const ours = slotAddresses(owner, t0);
+  assert.ok(pool.authorized.every((u) => ours.has(u)), "the page mined to the owner's slot address");
   const block = pool.found[before].hash;
   const records = readFileSync(join(dir, 'blocks.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
   assert.equal(records.find((r) => r.blockHash === block)?.visitor, visitor.address, "recorded against the page's visitor");

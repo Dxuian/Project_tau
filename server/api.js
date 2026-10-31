@@ -1,9 +1,13 @@
-// The payout HTTP API: POST /payout {"address"} and GET /health, as a
-// web-standard fetch(request) handler. The Worker, a Next.js route handler or
-// a Pages Function can call it directly; the Node server adapts node:http to
-// it. It builds the library's payout service from your config, stores and key.
+// The payout HTTP API, as a web-standard fetch(request) handler:
+//   GET  /address  this hour's mining address (cacheable until the hour ends)
+//   POST /payout   {"address"}: pays that visitor for each block they provably found
+//   GET  /health
+// The Worker, a Next.js route handler or a Pages Function can call it directly;
+// the Node server adapts node:http to it. It builds the library's payout
+// service from your config, stores and key.
 import { createPayoutService } from '../tau-crypto/dist/payouts.js';
 import { isValidAddress } from '../tau-crypto/dist/wallet.js';
+import { addressPeriod } from './config.js';
 
 /** Larger request bodies are refused with 413. */
 export const MAX_BODY_BYTES = 4096;
@@ -32,15 +36,18 @@ async function readBody(request, max) {
 
 /**
  * @param config  from loadConfig()
- * @param deps    { shares, ledger, chain, ownerMnemonic?, log? }. Without
+ * @param deps    { shares, ledger, chain, ownerMnemonic?, log?, now? }. Without
  *                ownerMnemonic the service records shares but can't pay.
  */
-export function createPayoutApi(config, { shares, ledger, chain, ownerMnemonic, log = () => {} }) {
+export function createPayoutApi(config, { shares, ledger, chain, ownerMnemonic, log = () => {}, now = Date.now }) {
   let service;
   try {
     service = createPayoutService({
       ownerAddress: config.ownerAddress,
       ownerMnemonic,
+      ownerXpub: config.ownerXpub,
+      addressPeriod: addressPeriod(config),
+      now,
       sharePercent: config.clientSharePercent,
       network: config.network,
       shares,
@@ -52,7 +59,9 @@ export function createPayoutApi(config, { shares, ledger, chain, ownerMnemonic, 
     });
   } catch (err) {
     // Name the settings, not the library's parameters.
-    if (/not the wallet of ownerAddress/.test(err.message)) throw new Error('OWNER_MNEMONIC is not the wallet of TAU_OWNER_ADDRESS');
+    if (/ownerMnemonic is not the wallet of ownerAddress/.test(err.message)) throw new Error('OWNER_MNEMONIC is not the wallet of TAU_OWNER_ADDRESS');
+    if (/ownerXpub is not the wallet of ownerAddress/.test(err.message)) throw new Error('TAU_OWNER_XPUB is not the wallet of TAU_OWNER_ADDRESS');
+    if (/need ownerXpub or ownerMnemonic/.test(err.message)) throw new Error('hourly addresses need TAU_OWNER_XPUB or OWNER_MNEMONIC');
     throw err;
   }
 
@@ -73,6 +82,20 @@ export function createPayoutApi(config, { shares, ledger, chain, ownerMnemonic, 
     }
     if (request.method === 'GET' && pathname === '/health') {
       return reply(200, { ok: true, target: config.target, network: config.network, pool: config.pool, ownerAddress: config.ownerAddress, canPay: service.canPay });
+    }
+    if (request.method === 'GET' && pathname === '/address') {
+      let mining;
+      try {
+        mining = service.addressFor();
+      } catch (err) {
+        return reply(500, { error: err.message });
+      }
+      // Cacheable (a CDN, the site's fetch cache) until this address's time is up.
+      const seconds = mining.until ? Math.max(0, Math.floor((Date.parse(mining.until) - now()) / 1000)) : 300;
+      return new Response(toJson({ ...mining, network: config.network }), {
+        status: 200,
+        headers: { ...headers, 'cache-control': `public, max-age=${seconds}` },
+      });
     }
     if (request.method === 'POST' && pathname === '/payout') {
       const body = await readBody(request, MAX_BODY_BYTES);
@@ -101,6 +124,8 @@ export function createPayoutApi(config, { shares, ledger, chain, ownerMnemonic, 
     service,
     /** The bridge interceptor (createBridge / createFetchBridge `intercept`). */
     intercept: service.intercept,
+    /** The owner address visitors who connect at `time` mine to: { address, index, from, until }. */
+    addressFor: (time) => service.addressFor(time),
     verifyPayout: (address) => service.verifyPayout(address),
     payoutAll: () => service.payoutAll(),
     /** POST /payout {"address"} -> verifyPayout; GET /health; CORS for config.origins. */

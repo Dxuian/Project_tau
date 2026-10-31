@@ -1,6 +1,7 @@
 # Cloudflare target (worker.js). Deploy with your own account, from the repo root:
 #   npx wrangler d1 create tau-payouts -c server/cloudflare/wrangler.toml       -> put the id below
 #   npx wrangler secret put OWNER_MNEMONIC -c server/cloudflare/wrangler.toml   -> the owner wallet's words (never in this file)
+#   npx wrangler secret put TAU_OWNER_XPUB -c server/cloudflare/wrangler.toml   -> optional: its accountXpub (reveals all its addresses)
 #   npx wrangler deploy -c server/cloudflare/wrangler.toml
 # Browsers then mine with mineBTC(address, 'wss://<your-worker>.workers.dev').
 name = "tau-payout"
@@ -12,6 +13,9 @@ TAU_TARGET = "cloudflare"
 TAU_NETWORK = "mainnet"
 TAU_POOL = "stratum+tcp://solo.ckpool.org:3333"
 TAU_OWNER_ADDRESS = "REPLACE_WITH_YOUR_OWNER_ADDRESS"
+# A fresh owner address for visitors every hour (receive index 1 + hours since the epoch); "0": always TAU_OWNER_ADDRESS.
+TAU_ADDRESS_PERIOD_MS = "3600000"
+TAU_ADDRESS_EPOCH = "2026-01-01T00:00:00Z"
 TAU_CLIENT_SHARE_PERCENT = "10"
 TAU_MIN_CONFIRMATIONS = "100"
 TAU_MAX_FEE_RATE = "200"

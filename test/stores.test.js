@@ -88,7 +88,8 @@ for (const [kind, make] of Object.entries(kinds)) {
 
     test('the payout engine pays once through these stores', async () => {
       const stores = await make();
-      const config = loadConfig({ TAU_OWNER_ADDRESS: OWNER, TAU_STORAGE: 'memory' });
+      // One owner address (period 0): the store contract, not the address slots, is under test.
+      const config = loadConfig({ TAU_OWNER_ADDRESS: OWNER, TAU_STORAGE: 'memory', TAU_ADDRESS_PERIOD_MS: '0' });
       const visitor = createWallet().address;
       const recorder = createPayoutApi(config, { ...stores, chain: {} }); // the bridge side: no key
       const found = await findBlockThrough(recorder.intercept, visitor);
