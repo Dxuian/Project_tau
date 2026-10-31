@@ -4,3 +4,4 @@ payout-ledger/
 .env
 *.log
 .DS_Store
+.wrangler/

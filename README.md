@@ -1,79 +1,111 @@
 # Project_tau
 
-Browser Bitcoin mining with wallet creation, found-block verification and payouts.
+Browser Bitcoin mining where visitors keep a share of the blocks they find.
 
-- `cpuminer-opt-js/` is the miner library: cpuminer-opt compiled to WebAssembly, for Node and browsers. See its README.
-- `btc.js` holds the site's API on top of it.
-- `btc.browser.js` is the same file bundled with its dependencies, for web pages.
-
-## The model
-
-- Visitors mine in their browser through your **payout bridge**, which logs them in to the pool with **your** address. Every block they find pays you.
-- If a visitor's miner finds a block, `verifyPayout(theirAddress)` sends them **10%** of what you received (`CLIENT_SHARE_PERCENT`). You pay the network fee.
+- Visitors mine in their browser through your **payout bridge**, which logs them in to the pool with **your** address. Every block pays you.
+- If a visitor's miner finds a block, they get **10%** of what you received. The percentage is a setting, and you pay the network fee.
 
 > **Consent and odds.** Mining runs the visitor's CPU. Only start it after they agree, and tell them about the split. Also tell them the odds: one browser at ~10 MH/s finds a Bitcoin block about once in 2 billion years, so this is a lottery ticket, not income.
 
-## API (`btc.js`)
+## What lives where
 
-| function | where | what |
+The rule: **mechanisms go in the library; your policy, keys, storage and deployment stay in the app.**
+
+| piece | where |
+|---|---|
+| mining: `createMiner`, `mineBTC` | library: `cpuminer-opt-js` |
+| wallets: `createWallet`, `walletFromMnemonic`, `isValidAddress` (offline) | library: `cpuminer-opt-js/wallet` |
+| sending BTC: `payout`, plus the chain clients `esplora` / `bitcoinCore` | library: `cpuminer-opt-js/wallet` |
+| proof that a share is a block (`rebuildBlockHeader`, `verifyBlock`), and the payout engine `verifyPayout(address, { shares, ledger, chain, ownerMnemonic, sharePercent })` | library: `cpuminer-opt-js/payouts` |
+| the bridges, Node and Cloudflare (`createBridge`, `createWorkerBridge`), and the share auditor | library: `cpuminer-opt-js/bridge` |
+| your settings: owner address, 10%, pool, network, chain provider, allowed origins, target | app: `app/config.js` (`TAU_*` variables) |
+| your key: `OWNER_MNEMONIC` | app: an environment variable or a Worker secret, never in a file |
+| where records live: files (Node) or D1 (Cloudflare) | app: `app/stores/` |
+| where it runs: `server.js` (Node) or `worker.js` + `wrangler.toml` (Cloudflare) | app |
+
+`btc.js` re-exports all of it, so `createWallet`, `mineBTC`, `payout`, `verifyPayout` and `startPayoutBridge` still come from one file.
+
+## Settings
+
+One set of settings works for both targets. On Node they are environment variables; on Cloudflare they are the `[vars]` in `wrangler.toml`.
+
+| variable | default | meaning |
 |---|---|---|
-| `createWallet({ words = 12, network = 'mainnet' })` | browser/Node | `{ mnemonic, address, path }`: 12 random words and their first native SegWit (`bc1q…`) address, BIP84, the same as Sparrow derives. Show the words once and never send them to a server. |
-| `walletFromMnemonic(words, { network })` | browser/Node | the address of an existing wallet (checks the checksum) |
-| `isValidAddress(address, network)` | browser/Node | checks that an address is valid on that network |
-| `mineBTC(address, url, options)` | browser/Node | starts mining for `address` and returns the running miner (`stop()`, `stats()`, events). `url` is your payout bridge (`wss://…`), or a pool (`stratum+tcp://…`, Node only, plain solo mining with no split). |
-| `startPayoutBridge({ listen, pool, ownerAddress, ledgerDir, origins })` | server | the bridge browsers mine through; records every share |
-| `verifyPayout(address, options)` | server | pays `address` 10% of each block it provably found, at most once per block |
-| `payout(to, amountSats, options)` | server | sends BTC from the owner wallet |
-| `esplora(url)`, `bitcoinCore({ url, user, pass })` | server | blockchain access for the two functions above (default: mempool.space) |
+| `TAU_OWNER_ADDRESS` | required | your address: the pool pays it, and visitors are logged in as it |
+| `TAU_CLIENT_SHARE_PERCENT` | `10` | the finder's share of your block reward, whole percent |
+| `TAU_POOL` | `stratum+tcp://solo.ckpool.org:3333` | the only pool the bridge connects to |
+| `TAU_NETWORK` | `mainnet` | or `testnet`, `regtest` |
+| `TAU_CHAIN`, `TAU_CHAIN_URL` | `esplora`, `https://mempool.space/api` | or `bitcoin-core` with `TAU_CHAIN_USER` / `TAU_CHAIN_PASS` for your own node |
+| `TAU_STORAGE` | `file` (Node), `d1` (Cloudflare) | `TAU_STORAGE_DIR` (default `payout-ledger`), `TAU_D1_BINDING` (default `DB`) |
+| `TAU_ORIGINS` | none | the web pages allowed to connect and call `/payout`, comma-separated |
+| `TAU_MIN_CONFIRMATIONS`, `TAU_MAX_FEE_RATE` | `100`, `200` | the minimum confirmations before paying (at least 100); the most it will pay in fees, in sat/vB |
+| `TAU_LISTEN`, `TAU_HOST`, `TAU_SWEEP_INTERVAL_MS` | `8080`, all interfaces, `0` | Node only. The sweep pays every visitor with a mature block on a timer; `0` means only when asked. |
+| `OWNER_MNEMONIC` | none | the owner wallet's words; without them shares are recorded but nothing is paid |
+
+Make the owner wallet a dedicated one with `createWallet()`, not your personal seed. The service refuses to start if `OWNER_MNEMONIC` doesn't belong to `TAU_OWNER_ADDRESS`.
+
+## Pick a target
+
+### Node: `server.js` on your server
+
+```sh
+TAU_OWNER_ADDRESS=bc1q… OWNER_MNEMONIC="word1 … word12" TAU_ORIGINS=https://yoursite.com node server.js
+```
+
+One port serves:
+- the bridge (WebSocket);
+- `POST /payout {"address": "…"}`;
+- `GET /health`.
+
+The bridge doesn't do TLS itself: for `wss://`, put it behind nginx or Caddy.
+
+### Cloudflare: `worker.js`, no server
+
+These steps run under your own Cloudflare account:
+
+```sh
+npx wrangler d1 create tau-payouts            # put the id into wrangler.toml
+# edit wrangler.toml: TAU_OWNER_ADDRESS, TAU_ORIGINS
+npx wrangler secret put OWNER_MNEMONIC
+npx wrangler deploy
+```
+
+It serves the same three things from the Worker. Records go to D1, and the tables are created on first use. An optional cron trigger in `wrangler.toml` runs the payout sweep.
+
+Things to check on Cloudflare:
+- Workers can't open connections to private or localhost addresses, so the pool must be public.
+- The free plan's CPU limits may cut long connections. The miner reconnects by itself, but the paid plan is the safer choice.
+- The pool sees every visitor connecting from Cloudflare's addresses and may limit that.
 
 ### A visitor's page
 
-Serve `btc.browser.js` together with the `cpuminer-opt-js/dist/` folder (same layout as this repo):
+Serve the `cpuminer-opt-js/dist/` folder:
 
 ```html
 <script type="module">
-  import { createWallet, mineBTC } from './btc.browser.js';
-  const wallet = createWallet();             // show wallet.mnemonic once; keep only wallet.address
+  import { mineBTC } from './cpuminer-opt-js/dist/index.js';
+  import { createWallet } from './cpuminer-opt-js/dist/wallet.js';
+  const wallet = createWallet();               // show wallet.mnemonic once; keep only wallet.address
   startButton.onclick = async () => {
-    const miner = await mineBTC(wallet.address, 'wss://pool.yoursite.com');
+    const miner = await mineBTC(wallet.address, 'wss://pool.yoursite.com');   // your bridge (Node or Worker)
     miner.on('hashrate', (h) => console.log(h.hps));
   };
+  // later: fetch('https://pool.yoursite.com/payout', { method: 'POST', body: JSON.stringify({ address: wallet.address }) })
 </script>
 ```
-
-### Your server (Node 22.3+)
-
-```js
-import { startPayoutBridge, verifyPayout } from './btc.js';
-
-// The owner wallet: make a dedicated one with createWallet(), not your personal seed.
-// OWNER_MNEMONIC holds its words. Its address is what the pool pays.
-await startPayoutBridge({
-  listen: 8080,
-  pool: 'stratum+tcp://solo.ckpool.org:3333',
-  ownerAddress: 'bc1q…owner…',
-  origins: ['https://yoursite.com'],
-});
-
-// e.g. from an HTTP endpoint the visitor calls; it is safe to expose, because it
-// only ever pays `address`, and only for that address's own blocks:
-const results = await verifyPayout(address);   // [{ blockHash, status, payoutSats, txid, ... }]
-```
-
-`OWNER_MNEMONIC` and `PAYOUT_LEDGER` (default `./payout-ledger`) are read from the environment. The bridge doesn't do TLS itself: for `wss://`, put it behind nginx or Caddy.
 
 ## How a win is verified
 
 Nothing a visitor says is trusted.
 
 1. **The bridge sees everything.** Every visitor's miner talks to the pool through your bridge. The bridge sees each job the pool sends and each share the miner submits, on a connection tied to the visitor address it logged in with. One address per connection.
-2. **Each share is checked when it arrives.** The bridge rebuilds the share's block header itself and hashes it, so proof of work can't be faked. It records the raw share in `shares.jsonl`, together with whether it is a block.
+2. **Each share is recorded before the pool sees it.** The bridge's auditor rebuilds the share's block header itself and hashes it, so proof of work can't be faked. It stores the raw share in a file or in D1, together with whether it is a block, and only then forwards the share to the pool.
 3. **`verifyPayout` confirms the block on the blockchain.** It rebuilds each recorded block from the raw fields (it never trusts a stored hash) and pays only if all of these hold:
    - the block is in the best chain;
    - it has at least 100 confirmations, so a reorg can't undo it;
    - its coinbase transaction is exactly the one built from that visitor's share;
    - that coinbase pays your address.
-4. **Each block is paid at most once.** The payment is written to `payouts.jsonl` as `pending`, with its txid, before it's broadcast, and as `sent` after. A lock file stops two runs at once.
+4. **Each block is paid at most once.** The payment is reserved before it's broadcast. A single atomic step claims the block and the exact coins it spends, using a lock file on Node and one D1 transaction on Cloudflare. It's marked `sent` afterwards.
 
 What it refuses, and why:
 
@@ -82,7 +114,7 @@ What it refuses, and why:
 | claiming a block they didn't find | the block must be on-chain, and its header and coinbase must match the visitor's own recorded share |
 | getting someone else's payout | a win belongs to the connection that submitted the share; `verifyPayout(a)` only pays `a`, and only for `a`'s blocks |
 | mining to their own address through your site | the bridge replaces their pool login with your address |
-| getting paid twice | the ledger and lock allow one payout per block; a crashed attempt stays `needs-review` |
+| getting paid twice | one reservation per block and per coin, even across processes or Workers; a crashed attempt stays `needs-review` |
 | protocol tricks | only five stratum messages are allowed; JSON is re-serialized after checking (no duplicate-key tricks); hex fields and sizes are validated; version rolling is refused; submits are rate-limited; extranonce changes are tracked per job |
 
 `verifyPayout` reports one status per block:
@@ -94,33 +126,35 @@ What it refuses, and why:
 | `immature` | under 100 confirmations; ask again later |
 | `not-in-chain` | not a block in the best chain (stale, orphaned or unknown) |
 | `not-ours` | the coinbase on the chain is not the one from the share, or doesn't pay you |
-| `not-paid-yet` | verified, but the payment couldn't be built yet, e.g. no mature funds, or fees above `maxFeeRate` |
+| `not-paid-yet` | verified, but the payment couldn't be built yet, e.g. no mature funds, or fees above the cap |
 | `needs-review` | a payment was started but not confirmed as sent |
 
-For `needs-review`, first look the txid up on a block explorer. If it never reached the chain, append `{"type":"payout","status":"void","blockHash":"…"}` to `payouts.jsonl` to allow a retry. The retry builds the identical transaction, so even if the first attempt did get through, the visitor is never paid twice.
+For `needs-review`, first look the txid up on a block explorer. If it never reached the chain, release the attempt to allow a retry: run `ledger.void(blockHash)` on the store (it's in `app/stores/`). The retry builds the identical transaction, so even if the first attempt did get through, the visitor is never paid twice.
 
 ## Security notes
 
-- **The owner wallet is a hot wallet.** `verifyPayout` signs automatically, so the server holds the owner's words and every block reward lands in that wallet. Use a dedicated wallet, and move your 90% to cold storage (Sparrow) after a win.
-- **The ledger is trusted.** Anyone who can write to `payout-ledger/` could also read `OWNER_MNEMONIC`, so protect the server.
-- **The libraries were reviewed.** The wallet and transaction code is Paul Miller's audited `@scure`/`@noble` libraries, pinned exactly. The review is in [AUDIT.md](AUDIT.md). `selectUTXO`, which isn't audited, is not used; coin selection is our own, a simple largest-first pick.
+- **The owner wallet is a hot wallet** on either target, whether its words are an environment variable or a Worker secret. Every block reward lands in it, so move your 90% to cold storage (Sparrow) after a win.
+- **The records are trusted.** Anyone who can write your share records could also read `OWNER_MNEMONIC`, so protect the server or Cloudflare account.
+- **The libraries were reviewed.** The wallet and transaction code is Paul Miller's audited `@scure`/`@noble` libraries, pinned exactly and bundled into the library's `dist/`. The review is in [cpuminer-opt-js/AUDIT.md](cpuminer-opt-js/AUDIT.md). `selectUTXO`, which isn't audited, is not used; coin selection is our own largest-first pick.
 
 ## Development
 
 Everything runs in Docker:
 - the `app` container reuses the `cpuminer-opt-js-dev:local` image;
-- tests also start a private **regtest** Bitcoin Core 32.1 node, with no peers and no real network.
+- tests start a private **regtest** Bitcoin Core 32.1 node, with no peers and no real network;
+- the Cloudflare tests run the real Workers runtime (`workerd`, through Miniflare) locally.
 
 ```sh
 cpuminer-opt-js/dev setup   # once: builds the dev image
 ./dev setup                 # regtest bitcoind image, npm ci --ignore-scripts
 ./dev test                  # all tests (starts a fresh regtest node)
-./dev build                 # rebuild btc.browser.js after changing btc.js (commit it)
-./dev audit                 # re-run the dependency checks from AUDIT.md
+./dev bundle                # the Worker as `wrangler deploy` would build it
 ```
 
 The tests cover:
-- the BIP39, BIP32 and BIP84 test vectors;
-- the auditor, against Bitcoin block 1 and attack cases;
-- payouts and verification, against a mock chain;
-- an end-to-end run: the real miner, on Node and in headless Chromium, mines through the payout bridge to a regtest pool. bitcoind accepts the block, and once it is mature the visitor is paid exactly 10%, once. An orphaned block is never paid.
+- loading and validating the settings;
+- both storage adapters against one contract, including concurrent reservations;
+- end to end on both targets: the real miner mines through the bridge (`server.js`, and `worker.js` in workerd with D1) to a regtest pool. bitcoind accepts the block; once it is mature, `POST /payout` pays exactly 10%, once, and an orphaned block is never paid;
+- a page in headless Chromium mining through the bridge and calling `/payout` across origins.
+
+The library's own tests, build and dependency audit run with `cpuminer-opt-js/dev`.

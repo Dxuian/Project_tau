@@ -10,10 +10,12 @@ usage: ./dev <command> [args]
 
   setup          build the regtest bitcoind image and install dependencies
   test [files]   run the tests (starts a fresh private regtest bitcoind)
-  build          build btc.browser.js
-  audit          re-run the dependency checks recorded in AUDIT.md
+  bundle         bundle worker.js as `wrangler deploy` would (into .wrangler/bundle)
   shell [cmd]    open a shell (or run cmd) in the app container
   down           stop the regtest bitcoind
+
+The library's own commands (build, its tests, the dependency audit) are in
+cpuminer-opt-js/dev.
 USAGE
 }
 
@@ -42,8 +44,7 @@ case "$cmd" in
     trap 'docker compose stop bitcoind >/dev/null 2>&1 || true' EXIT
     if [ $# -eq 0 ]; then run app npm test; else run app node --test --test-concurrency=1 "$@"; fi
     ;;
-  build)        run app npm run build ;;
-  audit)        run app node scripts/audit.mjs "$@" ;;
+  bundle)       run app npx wrangler deploy --dry-run --outdir .wrangler/bundle ;;
   shell)
     if [ $# -eq 0 ]; then run app bash; else run app "$@"; fi
     ;;

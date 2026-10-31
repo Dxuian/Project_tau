@@ -12,6 +12,8 @@ services:
     shm_size: 1gb
     environment:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      # wrangler: no usage telemetry from this machine
+      WRANGLER_SEND_METRICS: "false"
       BITCOIND_RPC: http://bitcoind:18443
       BITCOIND_USER: tau
       BITCOIND_PASS: tau

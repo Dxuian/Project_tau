@@ -1,6 +1,6 @@
-// btc.browser.js in headless Chromium: it is up to date, creates wallets with
-// the browser's crypto, and a visitor's page mines a block through the payout
-// bridge (regtest pool, when bitcoind is available).
+// A visitor's page in headless Chromium, using the library's dist/ directly:
+// creates a wallet, mines a regtest block through the Node payout bridge, and
+// asks for its payout over CORS. The block is recorded against the page's visitor.
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -10,113 +10,93 @@ import { tmpdir } from 'node:os';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
-import { bitcoinCore, createWallet, startPayoutBridge } from '../btc.js';
-import { buildBrowser } from '../scripts/build-browser.mjs';
+import { createWallet, loadConfig, startNodeServer } from '../btc.js';
 import { startRegtestPool } from './regtest-pool.js';
+import { nodeReady, regtest, regtestChainEnv, until } from './helpers.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const RPC = process.env.BITCOIND_RPC;
+const core = regtest();
 const PAGE = `<!doctype html><meta charset="utf-8"><script type="module">
-import * as btc from '/btc.browser.js';
+import { mineBTC } from '/cpuminer-opt-js/dist/index.js';
+import { createWallet } from '/cpuminer-opt-js/dist/wallet.js';
 window.T = {
-  create: () => btc.createWallet(),
-  restore: (words) => btc.walletFromMnemonic(words).address,
-  valid: (a) => btc.isValidAddress(a),
+  wallet: () => createWallet({ network: 'regtest' }),
   async mine(address, bridge, pool) {
-    const miner = await btc.mineBTC(address, bridge, { pool, network: 'regtest', threads: 2 });
-    window.miner = miner;
-    return miner.stats().state;
+    window.miner = await mineBTC(address, bridge, { pool, network: 'regtest', threads: 2 });
+    return window.miner.stats().state;
   },
   stop: () => window.miner?.stop(),
-  async serverOnly() {
-    try { await btc.verifyPayout(btc.createWallet().address, { ownerMnemonic: 'x' }); return 'ran'; } catch (e) { return e.message; }
+  async payout(api, address) {
+    const res = await fetch(api, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address }) });
+    return { status: res.status, body: await res.json() };
   },
 };
 window.ready = true;
 </script>`;
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript' };
 
-let server;
+let site;
 let browser;
 let page;
-let base;
+let origin;
 
 before(async () => {
-  server = createServer(async (req, res) => {
+  site = createServer(async (req, res) => {
     const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     try {
-      let body;
-      if (path === '/') body = PAGE;
-      else {
-        const file = normalize(join(ROOT, path));
-        if (!file.startsWith(normalize(ROOT + sep))) throw new Error('outside root');
-        body = await readFile(file);
-      }
-      res.writeHead(200, { 'content-type': TYPES[extname(path)] ?? (path === '/' ? 'text/html' : 'application/octet-stream') });
+      const file = normalize(join(ROOT, path));
+      if (!file.startsWith(normalize(ROOT + sep))) throw new Error('outside root');
+      const body = path === '/' ? PAGE : await readFile(file);
+      res.writeHead(200, { 'content-type': path === '/' ? 'text/html' : extname(path) === '.js' ? 'text/javascript' : 'application/octet-stream' });
       res.end(body);
     } catch {
       res.writeHead(404).end();
     }
   });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  base = `http://127.0.0.1:${server.address().port}/`;
+  await new Promise((r) => site.listen(0, '127.0.0.1', r));
+  origin = `http://127.0.0.1:${site.address().port}`;
   browser = await chromium.launch();
   page = await browser.newPage();
   page.on('pageerror', (e) => console.error('page error:', e.message));
-  await page.goto(base);
+  await page.goto(`${origin}/`);
   await page.waitForFunction(() => window.ready === true);
 });
 
 after(async () => {
   await browser?.close();
-  await new Promise((r) => server?.close(r));
+  await new Promise((r) => site?.close(r));
 });
 
-test('btc.browser.js is up to date with btc.js', async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'tau-build-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const fresh = await buildBrowser(join(dir, 'btc.browser.js'));
-  assert.equal(readFileSync(fresh, 'utf8'), readFileSync(join(ROOT, 'btc.browser.js'), 'utf8'), 'run ./dev build');
-});
-
-test('creates and restores wallets in the browser', async () => {
-  const w = await page.evaluate(() => window.T.create());
-  assert.equal(w.mnemonic.split(' ').length, 12);
-  assert.match(w.address, /^bc1q/);
-  assert.equal(await page.evaluate((m) => window.T.restore(m), w.mnemonic), w.address);
-  const abandon = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-  assert.equal(await page.evaluate((m) => window.T.restore(m), abandon), 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu');
-  assert.equal(await page.evaluate(() => window.T.valid('nope')), false);
-  assert.match(await page.evaluate(() => window.T.serverOnly()), /runs on the server/);
-});
-
-test('a page mines a block through the payout bridge', { skip: !RPC && 'BITCOIND_RPC not set (run ./dev test)', timeout: 180_000 }, async (t) => {
-  const core = bitcoinCore({ url: RPC, user: process.env.BITCOIND_USER, pass: process.env.BITCOIND_PASS });
-  const end = Date.now() + 30_000;
-  while (!(await core.rpc('getblockchaininfo').then(() => true, () => false))) {
-    if (Date.now() > end) throw new Error('bitcoind not ready');
-    await new Promise((r) => setTimeout(r, 200));
-  }
+test('a page mines a block through the payout bridge and asks for its payout', { skip: !core && 'BITCOIND_RPC not set (run ./dev test)', timeout: 240_000 }, async (t) => {
+  await nodeReady(core);
   const owner = createWallet({ network: 'regtest' });
-  const visitor = createWallet({ network: 'regtest' });
-  const ledgerDir = mkdtempSync(join(tmpdir(), 'tau-browser-'));
-  t.after(() => rmSync(ledgerDir, { recursive: true, force: true }));
+  const visitor = await page.evaluate(() => window.T.wallet());
+  assert.match(visitor.address, /^bcrt1q/);
+  const dir = mkdtempSync(join(tmpdir(), 'tau-browser-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const pool = await startRegtestPool({ rpc: core.rpc });
   t.after(() => pool.close());
-  const bridge = await startPayoutBridge({ listen: 0, host: '127.0.0.1', pool: pool.url, ownerAddress: owner.address, network: 'regtest', ledgerDir });
-  t.after(() => bridge.close());
+  const config = loadConfig({
+    TAU_NETWORK: 'regtest',
+    TAU_POOL: pool.url,
+    TAU_OWNER_ADDRESS: owner.address,
+    TAU_STORAGE_DIR: dir,
+    TAU_LISTEN: '0',
+    TAU_HOST: '127.0.0.1',
+    TAU_ORIGINS: origin,
+    ...regtestChainEnv(),
+  });
+  const server = await startNodeServer(config, { ownerMnemonic: owner.mnemonic });
+  t.after(() => server.close());
 
   const before = pool.found.length;
-  assert.equal(await page.evaluate(([a, b, p]) => window.T.mine(a, b, p), [visitor.address, `ws://127.0.0.1:${bridge.port}`, pool.url]), 'running');
-  const deadline = Date.now() + 120_000;
-  while (pool.found.length === before) {
-    if (Date.now() > deadline) throw new Error('no block from the page');
-    await new Promise((r) => setTimeout(r, 100));
-  }
+  assert.equal(await page.evaluate(([a, b, p]) => window.T.mine(a, b, p), [visitor.address, `ws://127.0.0.1:${server.port}`, pool.url]), 'running');
+  await until(() => pool.found.length > before, 120_000, 'a block from the page');
   await page.evaluate(() => window.T.stop());
   assert.ok(pool.authorized.every((u) => u === owner.address));
   const block = pool.found[before].hash;
-  const shares = readFileSync(join(ledgerDir, 'shares.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-  const record = shares.find((s) => s.type === 'share' && s.blockHash === block);
-  assert.equal(record?.visitor, visitor.address, 'the block is recorded against the page\'s visitor');
+  const records = readFileSync(join(dir, 'blocks.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.equal(records.find((r) => r.blockHash === block)?.visitor, visitor.address, "recorded against the page's visitor");
+  const res = await page.evaluate(([api, a]) => window.T.payout(api, a), [`http://127.0.0.1:${server.port}/payout`, visitor.address]);
+  assert.equal(res.status, 200, 'CORS allowed the page');
+  assert.equal(res.body.results.find((r) => r.blockHash === block)?.status, 'immature');
 });

@@ -1,0 +1,31 @@
+# Cloudflare target (worker.js). Deploy with your own account:
+#   npx wrangler d1 create tau-payouts          -> put the id below
+#   npx wrangler secret put OWNER_MNEMONIC      -> the owner wallet's words (never in this file)
+#   npx wrangler deploy
+# Browsers then mine with mineBTC(address, 'wss://<your-worker>.workers.dev').
+name = "tau-payout"
+main = "worker.js"
+compatibility_date = "2026-07-30"
+
+[vars]
+TAU_TARGET = "cloudflare"
+TAU_NETWORK = "mainnet"
+TAU_POOL = "stratum+tcp://solo.ckpool.org:3333"
+TAU_OWNER_ADDRESS = "REPLACE_WITH_YOUR_OWNER_ADDRESS"
+TAU_CLIENT_SHARE_PERCENT = "10"
+TAU_MIN_CONFIRMATIONS = "100"
+TAU_MAX_FEE_RATE = "200"
+TAU_CHAIN = "esplora"
+TAU_CHAIN_URL = "https://mempool.space/api"
+TAU_STORAGE = "d1"
+TAU_D1_BINDING = "DB"
+TAU_ORIGINS = "https://yoursite.example"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tau-payouts"
+database_id = "REPLACE_WITH_THE_ID_FROM_wrangler_d1_create"
+
+# Pay every visitor with a mature block on a schedule (optional):
+# [triggers]
+# crons = ["*/30 * * * *"]
