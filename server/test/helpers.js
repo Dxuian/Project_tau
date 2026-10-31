@@ -1,5 +1,11 @@
 // Shared test helpers: a mock chain, an easy synthetic block, regtest access.
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { mineBTC } from '../../tau-crypto/dist/index.js';
 import { addressSlot, rebuildBlockHeader } from '../../tau-crypto/dist/payouts.js';
 import { addressScript, bitcoinCore, newAddress } from '../../tau-crypto/dist/wallet.js';
@@ -163,4 +169,20 @@ export function slotAddresses(owner, from, to = Date.now()) {
 export async function nextSlot() {
   const now = currentSlot();
   await until(() => currentSlot() > now, 5000, 'the next address slot');
+}
+
+/** server/ (where wrangler is installed and the Worker's config lives). */
+export const SERVER = fileURLToPath(new URL('..', import.meta.url));
+
+/** The payout Worker bundled by wrangler, as `wrangler deploy` would (into a temporary folder). */
+export function bundleWorker(t) {
+  const out = mkdtempSync(join(tmpdir(), 'tau-worker-'));
+  t.after(() => rmSync(out, { recursive: true, force: true }));
+  const r = spawnSync('npx', ['wrangler', 'deploy', '--dry-run', '--config', 'cloudflare/wrangler.toml', '--outdir', out], {
+    cwd: SERVER,
+    encoding: 'utf8',
+    env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1', HOME: out },
+  });
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+  return { out, files: readdirSync(out) };
 }

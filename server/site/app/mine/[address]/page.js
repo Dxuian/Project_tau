@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { isValidAddress } from 'tau-crypto/wallet';
+import { isValidAddress } from 'tau-crypto/wallet.js';
 import { siteConfig } from '../../../lib/config.js';
 import { miningAddress } from '../../../lib/payout-api.js';
 import Miner from './miner.js';

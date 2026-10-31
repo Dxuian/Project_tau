@@ -5,7 +5,7 @@
 // remembered on this device.
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { createWallet, isValidAddress, walletFromMnemonic } from 'tau-crypto/wallet';
+import { createWallet, isValidAddress, walletFromMnemonic } from 'tau-crypto/wallet.js';
 import { backupFileName, backupText, readBackup } from '../../lib/backup.js';
 
 const SAVED = 'tau.address';

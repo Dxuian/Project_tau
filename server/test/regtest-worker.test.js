@@ -5,32 +5,16 @@
 // pays the visitor 10% of the block, once.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { request as httpRequest } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Miniflare } from 'miniflare';
 import { accountXpub, createWallet, newAddress } from '../../tau-crypto/dist/wallet.js';
 import { startRegtestPool } from './regtest-pool.js';
-import { FAST_SLOTS, mineBlocks, nodeReady, ownerReward, regtest, regtestChainEnv, slotAddresses } from './helpers.js';
+import { FAST_SLOTS, bundleWorker, mineBlocks, nodeReady, ownerReward, regtest, regtestChainEnv, slotAddresses } from './helpers.js';
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const core = regtest();
-
-function bundleWorker(t) {
-  const out = mkdtempSync(join(tmpdir(), 'tau-worker-'));
-  t.after(() => rmSync(out, { recursive: true, force: true }));
-  const r = spawnSync('npx', ['wrangler', 'deploy', '--dry-run', '--config', 'cloudflare/wrangler.toml', '--outdir', out], {
-    cwd: ROOT,
-    encoding: 'utf8',
-    env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1', HOME: out },
-  });
-  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
-  return { out, files: readdirSync(out) };
-}
 
 test('the Worker bundle holds the bridge and payouts, not the miner', (t) => {
   const { out, files } = bundleWorker(t);

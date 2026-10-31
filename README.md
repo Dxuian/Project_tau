@@ -52,7 +52,7 @@ visitor's browser (site)                   site server (Vercel or Cloudflare)   
   The device remembers only the address.
 - **`/mine/[address]`** shows this hour's mining address, rendered on the server. Mining needs an explicit "I agree" before Start. It shows the hash rate and shares, and has a speed control. It pauses when the page is hidden.
 - **Your blocks** shows each block you found: waiting for 100 confirmations (with progress), or paid (with the transaction).
-- **The miner isn't bundled.** `tau-crypto/dist` is copied to `public/tau-crypto/` at build time, and the page loads it only when you press Start.
+- **The library is copied in at build time.** `tau-crypto/dist` goes to `lib/tau-crypto/` (what the pages import) and to `public/tau-crypto/` (the miner). The page loads the miner only when you press Start, so it is never bundled.
 
 ## Settings
 
@@ -110,7 +110,7 @@ TAU_OWNER_ADDRESS=bc1q… OWNER_MNEMONIC="…" node server/node/server.js
 
 The bridge doesn't do TLS itself, so for `wss://` put it behind nginx or Caddy.
 
-**The site, on Vercel:** create a project with **Root Directory `server/site`**. Vercel builds it with the repository around it, which it needs, because the library is `../../tau-crypto`. Set the four site variables.
+**The site, on Vercel:** create a project with **Root Directory `server/site`**. Vercel builds it with the repository around it, which it needs, because the build copies the library from `tau-crypto/dist`. Set the four site variables.
 
 **The site, on Cloudflare:** edit the `vars` in `server/site/wrangler.jsonc`, then, from `server/site`, run `npm run cf:build` and `npm run cf:deploy`. It deploys as a second Worker, next to the payout Worker.
 

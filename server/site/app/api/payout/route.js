@@ -1,6 +1,6 @@
 // POST /api/payout {"address"}: forwards to the payout service, which verifies
 // that address's blocks and pays its share of each mature one, once.
-import { isValidAddress } from 'tau-crypto/wallet';
+import { isValidAddress } from 'tau-crypto/wallet.js';
 import { siteConfig } from '../../../lib/config.js';
 import { requestPayout } from '../../../lib/payout-api.js';
 

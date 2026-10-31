@@ -29,7 +29,7 @@ The top level holds only `tau-crypto/` (the library), `server/` (everything depl
     - `cloudflare/` (`worker.js` holds the only Cloudflare-specific code: `connect` from `cloudflare:sockets`, `WebSocketPair`, `cf-connecting-ip`; plus `d1-stores.js`, `schema.sql`, `wrangler.toml`).
   - `site/`: the website, Next.js 16 App Router, plain JS.
     - Client components (`'use client'`) import `tau-crypto/wallet`.
-    - The miner is not bundled. `scripts/copy-miner.mjs` copies `tau-crypto/dist` to `public/tau-crypto/`, and the mine page loads it at run time.
+    - The library is copied in, not linked: `scripts/copy-library.mjs` copies `tau-crypto/dist` (on every build) to `lib/tau-crypto/` (imported as `tau-crypto/*` through `jsconfig.json`) and `public/tau-crypto/` (the miner, which the mine page loads at run time, so it is never bundled). The app needs nothing outside its folder, which OpenNext requires.
     - Server code reads `PAYOUT_API_URL`, `BRIDGE_URL`, `POOL_URL` and `NETWORK` at request time. `wrangler.jsonc` and `open-next.config.ts` are the Cloudflare (OpenNext) target; Vercel needs nothing extra.
   - `test/`: server and site tests. `docker/bitcoind/`: the regtest node image.
 - Never re-add a facade that mixes client and server exports (the old `btc.js`): it breaks `'use client'` / `'use server'`.

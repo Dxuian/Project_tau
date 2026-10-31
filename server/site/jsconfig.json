@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "tau-crypto/*": ["./lib/tau-crypto/*"]
+    }
+  }
+}

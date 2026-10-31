@@ -2,6 +2,7 @@ node_modules/
 .next/
 .open-next/
 .wrangler/
-# copied from ../tau-crypto/dist at build time
+# copied from tau-crypto/dist at build time (scripts/copy-library.mjs)
+lib/tau-crypto/
 public/tau-crypto/
 next-env.d.ts

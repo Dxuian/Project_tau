@@ -5,17 +5,16 @@
   "type": "module",
   "description": "The Project Tau website (Next.js): a wallet on the spot, consent-first mining, payout status. Deploys to Vercel or Cloudflare (OpenNext).",
   "scripts": {
-    "build": "node scripts/copy-miner.mjs && next build",
+    "build": "node scripts/copy-library.mjs && next build",
     "start": "next start",
-    "cf:build": "node scripts/copy-miner.mjs && opennextjs-cloudflare build",
+    "cf:build": "node scripts/copy-library.mjs && opennextjs-cloudflare build",
     "cf:preview": "opennextjs-cloudflare preview",
     "cf:deploy": "opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "next": "16.4.3",
     "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "tau-crypto": "file:../../tau-crypto"
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "1.20.15",
