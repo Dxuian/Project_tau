@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>tau-crypto demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font: 14px/1.45 system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; color: #1d1d1f; }
+    h1 { font-size: 1.4rem; margin-bottom: .2rem; }
+    .notice { background: #fff6e0; border: 1px solid #e8c56b; padding: .7rem 1rem; border-radius: 6px; }
+    fieldset { border: 1px solid #d6d6d6; border-radius: 6px; margin: 1rem 0; }
+    label { display: grid; grid-template-columns: 9rem 1fr; gap: .6rem; align-items: center; margin: .35rem 0; }
+    input, select { font: inherit; padding: .25rem .4rem; }
+    button { font: inherit; padding: .4rem 1rem; margin-right: .5rem; }
+    pre { background: #f4f4f6; padding: .7rem; border-radius: 6px; overflow: auto; max-height: 16rem; }
+    .stat { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <h1>tau-crypto</h1>
+  <p>cpuminer-opt compiled to WebAssembly, running in this page.</p>
+  <p class="notice"><strong>Nothing runs until you press Start.</strong> Mining uses this device's CPU (and GPU, if
+    WebGPU is available) and keeps it busy. Only mine on devices you own or where the owner has agreed.
+    Browsers can't open TCP connections, so pool traffic goes through a <code>tau-crypto bridge</code> you run yourself.</p>
+
+  <fieldset>
+    <legend>Pool</legend>
+    <label>Algorithm <select id="algo"></select></label>
+    <label>Pool URL <input id="url" value="stratum+tcp://solo.ckpool.org:3333"></label>
+    <label>Bridge <input id="bridge" value="ws://localhost:8080"></label>
+    <label>User / address <input id="user" placeholder="your payout address"></label>
+    <label>Threads <input id="threads" value="auto"></label>
+    <label>Throttle <input id="throttle" type="range" min="0" max="0.9" step="0.1" value="0"></label>
+  </fieldset>
+
+  <p>
+    <button id="start">Start</button>
+    <button id="stop" disabled>Stop</button>
+    <button id="bench">Benchmark (no network)</button>
+  </p>
+
+  <p>Hashrate: <span class="stat" id="rate">–</span> &nbsp; Shares: <span id="shares">0 / 0</span></p>
+  <h3>Environment</h3>
+  <pre id="caps">detecting…</pre>
+  <h3>Log</h3>
+  <pre id="log"></pre>
+
+  <script type="module">
+    import { benchmark, createMiner, detect, listAlgorithms } from '../../dist/index.js';
+
+    const $ = (id) => document.getElementById(id);
+    const log = (m) => { $('log').textContent = `${new Date().toLocaleTimeString()} ${m}\n` + $('log').textContent; };
+    const fmt = (h) => { const u = ['H/s', 'kH/s', 'MH/s', 'GH/s']; let i = 0; while (h >= 1000 && i < 3) { h /= 1000; i++; } return `${h.toFixed(2)} ${u[i]}`; };
+
+    for (const a of listAlgorithms()) {
+      const o = new Option(`${a.name}${a.status !== 'ok' ? ` (${a.status})` : ''}`, a.name, false, a.name === 'sha256d');
+      o.disabled = a.status === 'unsupported-upstream' || a.status === 'node-only';
+      $('algo').add(o);
+    }
+    detect().then((c) => ($('caps').textContent = JSON.stringify(c, null, 2)));
+
+    let miner = null;
+    $('start').onclick = async () => {
+      $('start').disabled = true;
+      try {
+        const t = $('threads').value.trim();
+        miner = await createMiner({
+          algo: $('algo').value, url: $('url').value, bridge: $('bridge').value, user: $('user').value,
+          threads: t === 'auto' ? 'auto' : Number(t), throttle: Number($('throttle').value),
+        });
+        miner.on('log', log);
+        miner.on('error', (e) => log(`error: ${e.message}`));
+        miner.on('tune', (p) => log(`tuned: ${p.cpu?.backend ?? 'no CPU'} x${p.cpu?.threads ?? 0}${p.gpu ? ' + webgpu' : ''}`));
+        miner.on('hashrate', (h) => ($('rate').textContent = fmt(h.hps)));
+        miner.on('share', () => { const s = miner.stats(); $('shares').textContent = `${s.accepted} / ${s.accepted + s.rejected + s.stale}`; });
+        $('stop').disabled = false;
+        await miner.start();
+      } catch (e) {
+        log(`failed: ${e.message}`);
+        $('start').disabled = false;
+        $('stop').disabled = true;
+      }
+    };
+    $('stop').onclick = async () => {
+      await miner?.stop();
+      miner = null;
+      $('start').disabled = false;
+      $('stop').disabled = true;
+      $('rate').textContent = '–';
+    };
+    $('throttle').oninput = () => miner?.setThrottle(Number($('throttle').value));
+    $('bench').onclick = async () => {
+      $('bench').disabled = true;
+      log(`benchmarking ${$('algo').value}…`);
+      try {
+        const r = await benchmark({ algo: $('algo').value, seconds: 5 });
+        for (const m of r.plan.measurements) log(`${m.backend}: ${m.hps ? fmt(m.hps) : m.error}`);
+        log(`total ${fmt(r.totalHps ?? 0)} with ${r.plan.cpu?.threads ?? 0} threads${r.plan.gpu ? ' + GPU' : ''}`);
+      } catch (e) {
+        log(`benchmark failed: ${e.message}`);
+      }
+      $('bench').disabled = false;
+    };
+  </script>
+</body>
+</html>

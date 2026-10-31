@@ -1,6 +1,6 @@
 // The site's API in one place.
 //
-//   Library (cpuminer-opt-js), generic mechanisms that take every value as a parameter:
+//   Library (tau-crypto), generic mechanisms that take every value as a parameter:
 //     mining:   mineBTC, DEFAULT_POOL
 //     wallets:  createWallet, newAddress, walletFromMnemonic, isValidAddress, addressScript
 //     payments: payout, buildPayment, esplora, bitcoinCore
@@ -9,9 +9,9 @@
 //     loadConfig / DEFAULTS, createPayoutService, fileStores, d1Stores,
 //     startNodeServer / startPayoutBridge (Node target; worker.js is the Cloudflare one),
 //     verifyPayout(address): the library engine with your config, stores and key.
-export { DEFAULT_POOL, mineBTC } from './cpuminer-opt-js/dist/index.js';
-export { addressScript, bitcoinCore, buildPayment, createWallet, esplora, isValidAddress, newAddress, payout, walletFromMnemonic } from './cpuminer-opt-js/dist/wallet.js';
-export { memoryStores, payoutAll, rebuildBlockHeader, verifyBlock } from './cpuminer-opt-js/dist/payouts.js';
+export { DEFAULT_POOL, mineBTC } from './tau-crypto/dist/index.js';
+export { addressScript, bitcoinCore, buildPayment, createWallet, esplora, isValidAddress, newAddress, payout, walletFromMnemonic } from './tau-crypto/dist/wallet.js';
+export { memoryStores, payoutAll, rebuildBlockHeader, verifyBlock } from './tau-crypto/dist/payouts.js';
 export { DEFAULTS, loadConfig, validateConfig } from './app/config.js';
 export { chainFromConfig, createPayoutService, poolTarget, toJson } from './app/service.js';
 export { fileStores } from './app/stores/file.js';

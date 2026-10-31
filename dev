@@ -15,7 +15,7 @@ usage: ./dev <command> [args]
   down           stop the regtest bitcoind
 
 The library's own commands (build, its tests, the dependency audit) are in
-cpuminer-opt-js/dev.
+tau-crypto/dev.
 USAGE
 }
 
@@ -23,8 +23,8 @@ if ! docker info >/dev/null 2>&1; then
   echo "Docker isn't reachable. Start Docker, then retry." >&2
   exit 1
 fi
-if ! docker image inspect cpuminer-opt-js-dev:local >/dev/null 2>&1; then
-  echo "Missing image cpuminer-opt-js-dev:local: run cpuminer-opt-js/dev setup first." >&2
+if ! docker image inspect tau-crypto-dev:local >/dev/null 2>&1; then
+  echo "Missing image tau-crypto-dev:local: run tau-crypto/dev setup first." >&2
   exit 1
 fi
 

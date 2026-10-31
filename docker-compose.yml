@@ -1,12 +1,12 @@
 # Everything for the top-level project runs in these containers (see ./dev).
-# `app` reuses the cpuminer-opt-js dev image (Node 26, Chromium); build it once
-# with `cpuminer-opt-js/dev setup`. `bitcoind` is a private regtest chain for
+# `app` reuses the tau-crypto dev image (Node 26, Chromium); build it once
+# with `tau-crypto/dev setup`. `bitcoind` is a private regtest chain for
 # tests only: no peers, no real network.
 name: project-tau
 
 services:
   app:
-    image: cpuminer-opt-js-dev:local
+    image: tau-crypto-dev:local
     working_dir: /repo
     init: true
     shm_size: 1gb

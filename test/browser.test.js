@@ -17,8 +17,8 @@ import { nodeReady, regtest, regtestChainEnv, until } from './helpers.js';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const core = regtest();
 const PAGE = `<!doctype html><meta charset="utf-8"><script type="module">
-import { mineBTC } from '/cpuminer-opt-js/dist/index.js';
-import { createWallet } from '/cpuminer-opt-js/dist/wallet.js';
+import { mineBTC } from '/tau-crypto/dist/index.js';
+import { createWallet } from '/tau-crypto/dist/wallet.js';
 window.T = {
   wallet: () => createWallet({ network: 'regtest' }),
   async mine(address, bridge, pool) {

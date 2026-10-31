@@ -1,9 +1,9 @@
 // The payout service: the library's auditor, payout engine and chain clients,
 // wired with your config, your stores and your key. Runtime-neutral (Node and
 // Cloudflare Workers); the entry points add the transport.
-import { createShareAuditor } from '../cpuminer-opt-js/dist/bridge.js';
-import { payoutAll, verifyPayout } from '../cpuminer-opt-js/dist/payouts.js';
-import { bitcoinCore, esplora, isValidAddress, walletFromMnemonic } from '../cpuminer-opt-js/dist/wallet.js';
+import { createShareAuditor } from '../tau-crypto/dist/bridge.js';
+import { payoutAll, verifyPayout } from '../tau-crypto/dist/payouts.js';
+import { bitcoinCore, esplora, isValidAddress, walletFromMnemonic } from '../tau-crypto/dist/wallet.js';
 
 /** JSON with bigints as strings. */
 export const toJson = (value) => JSON.stringify(value, (_key, v) => (typeof v === 'bigint' ? String(v) : v));

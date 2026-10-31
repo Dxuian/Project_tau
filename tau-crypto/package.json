@@ -1,0 +1,53 @@
+{
+  "name": "tau-crypto",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Crypto library for Bitcoin mining sites: cpuminer-opt compiled to WebAssembly (browsers, Node, workers), wallets and payments, payout proofs, and stratum bridges",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/types/src/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./wallet": {
+      "types": "./dist/types/src/wallet/index.d.ts",
+      "default": "./dist/wallet.js"
+    },
+    "./payouts": {
+      "types": "./dist/types/src/payouts/index.d.ts",
+      "default": "./dist/payouts.js"
+    },
+    "./bridge": {
+      "types": "./dist/types/bridge/index.d.ts",
+      "default": "./dist/bridge.js"
+    }
+  },
+  "bin": {
+    "tau-crypto": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "node --test --test-concurrency=1 test/*.test.ts",
+    "test:browser": "node --test --test-concurrency=1 test/browser/*.test.ts",
+    "audit": "node scripts/audit.mjs"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.4.0",
+    "@scure/bip32": "2.4.0",
+    "@scure/bip39": "2.4.0",
+    "@scure/btc-signer": "2.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "playwright-core": "1.64.1",
+    "typescript": "7.0.2"
+  }
+}

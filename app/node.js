@@ -1,8 +1,8 @@
 // The Node target: one HTTP server hosts the payout bridge (WebSocket) and the
 // payout API (POST /payout, GET /health).
 import { createServer } from 'node:http';
-import { createBridge } from '../cpuminer-opt-js/dist/bridge.js';
-import { memoryStores } from '../cpuminer-opt-js/dist/payouts.js';
+import { createBridge } from '../tau-crypto/dist/bridge.js';
+import { memoryStores } from '../tau-crypto/dist/payouts.js';
 import { loadConfig } from './config.js';
 import { chainFromConfig, createPayoutService, poolTarget } from './service.js';
 import { fileStores } from './stores/file.js';

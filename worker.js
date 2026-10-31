@@ -3,7 +3,7 @@
 // (POST /payout, GET /health); records live in D1; a cron trigger, if
 // configured, pays every visitor with a mature block.
 import { connect } from 'cloudflare:sockets';
-import { createWorkerBridge } from './cpuminer-opt-js/dist/bridge.js';
+import { createWorkerBridge } from './tau-crypto/dist/bridge.js';
 import { loadConfig } from './app/config.js';
 import { chainFromConfig, createPayoutService, poolTarget, toJson } from './app/service.js';
 import { d1Stores } from './app/stores/d1.js';

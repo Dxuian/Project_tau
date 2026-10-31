@@ -1,7 +1,7 @@
 // Your payout service's settings. Every value the library needs is a parameter
 // here, read from environment variables (Node) or Worker vars (Cloudflare).
 // The only secret, OWNER_MNEMONIC, is read separately by the entry points.
-import { isValidAddress } from '../cpuminer-opt-js/dist/wallet.js';
+import { isValidAddress } from '../tau-crypto/dist/wallet.js';
 
 export const DEFAULTS = Object.freeze({
   /** Where the bridge and payout service run: 'node' (server.js) or 'cloudflare' (worker.js). */

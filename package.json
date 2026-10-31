@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Payout service for browser Bitcoin mining on cpuminer-opt-js: config, storage and deployment (Node or Cloudflare Workers)",
+  "description": "Payout service for browser Bitcoin mining on tau-crypto: config, storage and deployment (Node or Cloudflare Workers)",
   "exports": {
     ".": "./btc.js"
   },

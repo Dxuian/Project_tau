@@ -13,11 +13,11 @@ The rule: **mechanisms go in the library; your policy, keys, storage and deploym
 
 | piece | where |
 |---|---|
-| mining: `createMiner`, `mineBTC` | library: `cpuminer-opt-js` |
-| wallets: `createWallet`, `newAddress`, `walletFromMnemonic`, `isValidAddress` (offline) | library: `cpuminer-opt-js/wallet` |
-| sending BTC: `payout`, plus the chain clients `esplora` / `bitcoinCore` | library: `cpuminer-opt-js/wallet` |
-| proof that a share is a block (`rebuildBlockHeader`, `verifyBlock`), and the payout engine `verifyPayout(address, { shares, ledger, chain, ownerMnemonic, sharePercent })` | library: `cpuminer-opt-js/payouts` |
-| the bridges, Node and Cloudflare (`createBridge`, `createWorkerBridge`), and the share auditor | library: `cpuminer-opt-js/bridge` |
+| mining: `createMiner`, `mineBTC` | library: `tau-crypto` |
+| wallets: `createWallet`, `newAddress`, `walletFromMnemonic`, `isValidAddress` (offline) | library: `tau-crypto/wallet` |
+| sending BTC: `payout`, plus the chain clients `esplora` / `bitcoinCore` | library: `tau-crypto/wallet` |
+| proof that a share is a block (`rebuildBlockHeader`, `verifyBlock`), and the payout engine `verifyPayout(address, { shares, ledger, chain, ownerMnemonic, sharePercent })` | library: `tau-crypto/payouts` |
+| the bridges, Node and Cloudflare (`createBridge`, `createWorkerBridge`), and the share auditor | library: `tau-crypto/bridge` |
 | your settings: owner address, 10%, pool, network, chain provider, allowed origins, target | app: `app/config.js` (`TAU_*` variables) |
 | your key: `OWNER_MNEMONIC` | app: an environment variable or a Worker secret, never in a file |
 | where records live: files (Node) or D1 (Cloudflare) | app: `app/stores/` |
@@ -79,12 +79,12 @@ Things to check on Cloudflare:
 
 ### A visitor's page
 
-Serve the `cpuminer-opt-js/dist/` folder:
+Serve the `tau-crypto/dist/` folder:
 
 ```html
 <script type="module">
-  import { mineBTC } from './cpuminer-opt-js/dist/index.js';
-  import { createWallet, newAddress } from './cpuminer-opt-js/dist/wallet.js';
+  import { mineBTC } from './tau-crypto/dist/index.js';
+  import { createWallet, newAddress } from './tau-crypto/dist/wallet.js';
   const wallet = createWallet();               // show wallet.mnemonic once; never store or send it
   startButton.onclick = async () => {
     const miner = await mineBTC(wallet.address, 'wss://pool.yoursite.com');   // your bridge (Node or Worker)
@@ -142,17 +142,17 @@ For `needs-review`, first look the txid up on a block explorer. If it never reac
 
 - **The owner wallet is a hot wallet** on either target, whether its words are an environment variable or a Worker secret. Every block reward lands in it, so move your 90% to cold storage (Sparrow) after a win.
 - **The records are trusted.** Anyone who can write your share records could also read `OWNER_MNEMONIC`, so protect the server or Cloudflare account.
-- **The libraries were reviewed.** The wallet and transaction code is Paul Miller's audited `@scure`/`@noble` libraries, pinned exactly and bundled into the library's `dist/`. The review is in [cpuminer-opt-js/AUDIT.md](cpuminer-opt-js/AUDIT.md). `selectUTXO`, which isn't audited, is not used; coin selection is our own largest-first pick.
+- **The libraries were reviewed.** The wallet and transaction code is Paul Miller's audited `@scure`/`@noble` libraries, pinned exactly and bundled into the library's `dist/`. The review is in [tau-crypto/AUDIT.md](tau-crypto/AUDIT.md). `selectUTXO`, which isn't audited, is not used; coin selection is our own largest-first pick.
 
 ## Development
 
 Everything runs in Docker:
-- the `app` container reuses the `cpuminer-opt-js-dev:local` image;
+- the `app` container reuses the `tau-crypto-dev:local` image;
 - tests start a private **regtest** Bitcoin Core 32.1 node, with no peers and no real network;
 - the Cloudflare tests run the real Workers runtime (`workerd`, through Miniflare) locally.
 
 ```sh
-cpuminer-opt-js/dev setup   # once: builds the dev image
+tau-crypto/dev setup   # once: builds the dev image
 ./dev setup                 # regtest bitcoind image, npm ci --ignore-scripts
 ./dev test                  # all tests (starts a fresh regtest node)
 ./dev bundle                # the Worker as `wrangler deploy` would build it
@@ -164,4 +164,4 @@ The tests cover:
 - end to end on both targets: the real miner mines through the bridge (`server.js`, and `worker.js` in workerd with D1) to a regtest pool. bitcoind accepts the block; once it is mature, `POST /payout` pays exactly 10%, once, and an orphaned block is never paid;
 - a page in headless Chromium mining through the bridge and calling `/payout` across origins.
 
-The library's own tests, build and dependency audit run with `cpuminer-opt-js/dev`.
+The library's own tests, build and dependency audit run with `tau-crypto/dev`.
