@@ -118,12 +118,12 @@ DB_PASSWORD='mysql://…' npm run db:migrate                          # the tabl
 npx wrangler deploy -c cloudflare/wrangler.toml
 ```
 
-Or connect the repository in the Cloudflare dashboard (Workers Builds):
-- Root directory: `server`.
+Or connect the repository in the Cloudflare dashboard (Workers Builds), as a Worker named like the `name` in `wrangler.toml` (`project-tau`):
+- Root directory: `server`. With the default `/`, the build fails: the top level has no Worker in it.
 - Build command: `npm ci --ignore-scripts`.
 - Deploy command: `npm run db:migrate && npx wrangler deploy -c cloudflare/wrangler.toml`.
-- Add `OWNER_MNEMONIC` and `DB_PASSWORD` as the Worker's secrets.
-- Add `DB_PASSWORD` again as a **build** secret, since the migrate step runs during the build.
+- Add `OWNER_MNEMONIC` and `DB_PASSWORD` as the Worker's secrets (Settings → Variables and Secrets).
+- Add `DB_PASSWORD` again as a **build** variable (Settings → Build → Variables and secrets), since the migrate step runs during the build.
 
 For D1 instead of TiDB, see the end of `wrangler.toml`.
 
@@ -142,7 +142,11 @@ The bridge doesn't do TLS itself, so for `wss://` put it behind nginx or Caddy.
 
 **The site, on Vercel:** create a project with **Root Directory `server/site`**. Vercel builds it with the repository around it, which it needs, because the build copies the library from `tau-crypto/dist`. Set the four site variables.
 
-**The site, on Cloudflare:** edit the `vars` in `server/site/wrangler.jsonc`, then, from `server/site`, run `npm run cf:build` and `npm run cf:deploy`. It deploys as a second Worker, next to the payout Worker.
+**The site, on Cloudflare:** edit the `vars` in `server/site/wrangler.jsonc`, then, from `server/site`, run `npm run cf:build` and `npm run cf:deploy`. It deploys as a second Worker, next to the payout Worker. In the dashboard (Workers Builds), connect it as a Worker named `tau-site`:
+- Root directory: `server/site`.
+- Build command: `npm ci --ignore-scripts && npm run cf:build`.
+- Deploy command: `npm run cf:deploy`.
+- It needs no secrets.
 
 ## How a win is verified
 

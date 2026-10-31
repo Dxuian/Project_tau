@@ -4,11 +4,13 @@
 #   npx wrangler secret put TAU_OWNER_XPUB -c cloudflare/wrangler.toml   -> optional: its accountXpub (reveals all its addresses)
 #   DB_PASSWORD='mysql://…' npm run db:migrate                          -> creates the tables / applies new migrations (tidb/migrations)
 #   npx wrangler deploy -c cloudflare/wrangler.toml
-# Or connect the repo in the Cloudflare dashboard (root directory server/): build command npm ci --ignore-scripts,
-# deploy command npm run db:migrate && npx wrangler deploy -c cloudflare/wrangler.toml; add the secrets to the
-# Worker, and DB_PASSWORD also as a build secret (the migrate step runs in the build).
-# Browsers then mine with mineBTC(address, 'wss://<your-worker>.workers.dev').
-name = "tau-payout"
+# Or connect the repo in the Cloudflare dashboard (Workers Builds) as the Worker project-tau: root directory server,
+# build command npm ci --ignore-scripts, deploy command npm run db:migrate && npx wrangler deploy -c cloudflare/wrangler.toml;
+# add the secrets to the Worker (Settings > Variables and Secrets), and DB_PASSWORD also as a build variable
+# (Settings > Build > Variables and secrets): the migrate step runs in the build.
+# Browsers then mine with mineBTC(address, 'wss://project-tau.deathxunnat.workers.dev').
+# The Worker's name in the Cloudflare dashboard.
+name = "project-tau"
 main = "worker.js"
 compatibility_date = "2026-07-30"
 
@@ -30,7 +32,8 @@ TAU_STORAGE = "tidb"
 TAU_DB_NAME = "tau"
 # Ordinary shares older than this are deleted by the cron run below; blocks and payouts are kept.
 TAU_SHARE_RETENTION_DAYS = "30"
-TAU_ORIGINS = "https://yoursite.example"
+# The site (server/site, the Worker tau-site).
+TAU_ORIGINS = "https://tau-site.deathxunnat.workers.dev"
 
 # Every hour: pay every visitor with a mature block, and purge old shares.
 [triggers]
