@@ -3,7 +3,9 @@
 // in Miniflare, D1 included, as its payout service and bridge. A visitor
 // creates a wallet, sees this hour's address rendered by the site Worker, mines
 // a regtest block through the payout Worker, and is paid through the site
-// Worker's /api/payout.
+// Worker's /api/payout. The site Worker reads its PostHog settings at request
+// time (a stand-in PostHog receives the page's events) and serves the source
+// maps that PostHog's error tracking reads.
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -15,7 +17,7 @@ import { Miniflare } from 'miniflare';
 import { chromium } from 'playwright-core';
 import { createWallet } from '../../tau-crypto/dist/wallet.js';
 import { startRegtestPool } from './regtest-pool.js';
-import { bundleWorker, migrateD1, nodeReady, ownerReward, regtest, regtestChainEnv, until } from './helpers.js';
+import { bundleWorker, DESKTOP_ARGS, desktopContext, migrateD1, nodeReady, ownerReward, regtest, regtestChainEnv, startFakePostHog, until } from './helpers.js';
 
 const SITE = fileURLToPath(new URL('../site/', import.meta.url));
 const core = regtest();
@@ -99,11 +101,24 @@ test('the site on Cloudflare: a wallet, the hour address rendered by the site Wo
   await migrateD1(await payoutWorker.getD1Database('DB'));
   const service = `http://127.0.0.1:${port}`;
   step('payout Worker up');
-  const site = await startSiteWorker({ PAYOUT_API_URL: service, BRIDGE_URL: `ws://127.0.0.1:${port}`, POOL_URL: pool.url, NETWORK: 'regtest' }, t);
+  // PostHog: the stand-in, in place of the real key and host in wrangler.jsonc.
+  const ph = await startFakePostHog();
+  t.after(() => ph.close());
+  const site = await startSiteWorker(
+    { PAYOUT_API_URL: service, BRIDGE_URL: `ws://127.0.0.1:${port}`, POOL_URL: pool.url, NETWORK: 'regtest', POSTHOG_KEY: 'phc_tautest', POSTHOG_HOST: ph.url },
+    t,
+  );
   step('site Worker up');
+  const home = await (await fetch(site)).text();
+  assert.ok(home.includes('phc_tautest'), 'the site Worker reads POSTHOG_KEY at request time');
+  // Source maps next to the scripts.
+  const script = new URL(home.match(/\/_next\/static\/[^"']+\.js/)[0], site);
+  const map = (await (await fetch(script)).text()).match(/\/\/# sourceMappingURL=(\S+)\s*$/)?.[1];
+  assert.ok(map, `${script.pathname} names its source map`);
+  assert.equal((await fetch(new URL(map, script))).status, 200, 'and serves it');
 
-  browser = await chromium.launch();
-  const page = await browser.newPage();
+  browser = await chromium.launch({ args: [...DESKTOP_ARGS] });
+  const page = await (await desktopContext(browser)).newPage();
   page.on('pageerror', (e) => console.error('page error:', e.message));
   await page.goto(`${site}/wallet`);
   await page.getByRole('button', { name: 'Create a wallet' }).click();
@@ -134,4 +149,14 @@ test('the site on Cloudflare: a wallet, the hour address rendered by the site Wo
   let reward = 0n;
   for (const b of pool.found.slice(before)) reward += (await ownerReward(core, b.hash, b.user)) / 10n;
   assert.equal((await core.utxos(address)).reduce((s, c) => s + c.value, 0n), reward, '10% of each block');
+
+  // The page's events reached PostHog (the stand-in), tagged with the app, addresses cut out.
+  try {
+    await until(() => ph.events().some((e) => e.event === 'mining_stopped'), 30_000, 'the analytics events');
+  } catch (err) {
+    throw new Error(`${err.message}:\n${ph.received()}`);
+  }
+  assert.deepEqual(new Set(ph.events().map((e) => e.properties?.app)), new Set(['project-tau']));
+  const sent = ph.requests.map((r) => r.text).join('\n');
+  assert.ok(!sent.includes(address) && !sent.includes(hour.address), 'no addresses');
 });

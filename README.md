@@ -61,6 +61,12 @@ Slot N (one an hour) is receive index N of our wallet: `1 + whole hours since TA
 - **`/mine/[address]`** shows this hour's mining address, rendered on the server. Mining needs an explicit "I agree" before Start. It shows the hash rate and shares, and has a speed control. It pauses when the page is hidden.
 - **Your blocks** shows each block you found: waiting for 100 confirmations (with progress), or paid (with the transaction).
 - **The library is copied in at build time.** `tau-crypto/dist` goes to `lib/tau-crypto/` (what the pages import) and to `public/tau-crypto/` (the miner). The page loads the miner only when you press Start, so it is never bundled.
+- **Analytics (PostHog)**, when `POSTHOG_KEY` is set (`lib/analytics.js`). Only what the site sends itself:
+  - page views, with Bitcoin addresses cut out of every URL;
+  - uncaught errors, for PostHog's error tracking. The browser source maps are served next to the scripts (`next.config.mjs`), so stack traces resolve without an upload step;
+  - named events, none of which carry words or addresses: wallet created, backup downloaded, words copied or shared, wallet restored, payout address chosen, mining consent, start, stop, speed, errors and unavailable, payout checks, blocks seen.
+
+  Nothing reads the page: no autocapture, session replay, heatmaps or surveys, and no remote config or scripts from PostHog, because the wallet page shows the 12 words. Every event carries `app: "project-tau"`, since the PostHog project is shared with other apps: filter on it. The footer says analytics is on.
 
 ## Settings
 
@@ -93,6 +99,7 @@ Make our wallet a dedicated one with `createWallet()`, not a personal seed. The 
 | `BRIDGE_URL` | where browsers mine: the payout service's `wss://` address |
 | `POOL_URL` | the pool that bridge allows (default `stratum+tcp://solo.ckpool.org:3333`) |
 | `NETWORK` | `mainnet` (default), `testnet` or `regtest` |
+| `POSTHOG_KEY`, `POSTHOG_HOST` | PostHog's public project key (`phc_…`; unset: no analytics) and its host (default `https://us.i.posthog.com`). Never the personal API key (`phx_…`). |
 
 ## Database
 
@@ -194,7 +201,9 @@ For `needs-review`, first look the txid up on a block explorer. If it never reac
 - **The records are trusted.** Anyone who can write our share records could also read `OWNER_MNEMONIC`, so protect the server, the Cloudflare account and the database. `DB_PASSWORD` is a secret: keep it in the Worker's secrets (and GitHub's, if you use them), never in `wrangler.toml` or the repository.
 - **The crypto libraries were reviewed.** The wallet and transaction code is Paul Miller's audited `@scure`/`@noble` libraries, pinned exactly and bundled into the library's `dist/`. The review is in [tau-crypto/AUDIT.md](tau-crypto/AUDIT.md). Other packages are pinned exactly and have verified npm registry signatures:
   - the site's framework packages (Next.js, React, OpenNext);
+  - the site's analytics, posthog-js: a release at least a week old, with SLSA provenance. It runs on the page that shows the words, so it is limited as described above, and the site test checks that nothing it sends contains the words or an address;
   - the server's database packages (Drizzle, TiDB's driver).
+- **PostHog's personal API key** (`phx_…`) manages the PostHog project. It never goes into the site, its settings or the repository.
 
 ## Development
 

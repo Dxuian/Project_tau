@@ -3,6 +3,8 @@
 // A visitor creates a wallet (download, share box, copy, restore from the
 // file), sees this hour's mining address rendered by the server, agrees, mines
 // a regtest block in the page, and once it's mature the page shows it paid.
+// Meanwhile the page reports to a stand-in PostHog: the named events, tagged
+// with the app, and never the words or an address.
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -15,7 +17,7 @@ import { createWallet } from '../../tau-crypto/dist/wallet.js';
 import { loadConfig } from '../config.js';
 import { startNodeServer } from '../node/index.js';
 import { startRegtestPool } from './regtest-pool.js';
-import { nodeReady, ownerReward, regtest, regtestChainEnv, until } from './helpers.js';
+import { DESKTOP_ARGS, desktopContext, nodeReady, ownerReward, regtest, regtestChainEnv, startFakePostHog, until } from './helpers.js';
 
 const SITE = fileURLToPath(new URL('../site/', import.meta.url));
 const core = regtest();
@@ -85,14 +87,23 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   t.after(() => payouts.close());
   const service = `http://127.0.0.1:${payouts.port}`;
   step('payout service up');
+  const ph = await startFakePostHog();
+  t.after(() => ph.close());
   const site = await startSite(
-    { PAYOUT_API_URL: service, BRIDGE_URL: `ws://127.0.0.1:${payouts.port}`, POOL_URL: pool.url, NETWORK: 'regtest' },
+    {
+      PAYOUT_API_URL: service,
+      BRIDGE_URL: `ws://127.0.0.1:${payouts.port}`,
+      POOL_URL: pool.url,
+      NETWORK: 'regtest',
+      POSTHOG_KEY: 'phc_tautest',
+      POSTHOG_HOST: ph.url,
+    },
     t,
   );
 
   step('site up');
-  browser = await chromium.launch();
-  const context = await browser.newContext({ acceptDownloads: true });
+  browser = await chromium.launch({ args: [...DESKTOP_ARGS] });
+  const context = await desktopContext(browser, { acceptDownloads: true });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: site });
   const page = await context.newPage();
   page.on('pageerror', (e) => console.error('page error:', e.message));
@@ -130,11 +141,13 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   // Restore from the downloaded file, in a fresh tab; the device remembers the address.
   const restore = await context.newPage();
   await restore.goto(`${site}/wallet`);
-  assert.ok((await restore.locator('.panel').first().innerText()).includes(address), 'remembered on this device');
+  await restore.locator('.panel').first().getByText(address).waitFor({ timeout: 10_000 }); // remembered on this device
   await restore.getByRole('button', { name: 'Restore from backup file' }).click();
   await restore.getByTestId('restore-file').setInputFiles(file);
   assert.equal((await restore.getByTestId('restored-address').innerText()).trim(), address);
   assert.ok(!(await restore.evaluate(() => JSON.stringify(localStorage))).includes(words[0] + ' ' + words[1]), 'no words stored');
+  // Sent before the tab goes (events are sent in batches).
+  await until(() => ph.events().some((e) => e.event === 'wallet_restored'), 20_000, 'the restore event');
   await restore.close();
 
   // The mine page: this hour's address, rendered on the server.
@@ -166,4 +179,31 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   for (const b of pool.found.slice(before)) reward += (await ownerReward(core, b.hash, b.user)) / 10n;
   const got = (await core.utxos(address)).reduce((s, c) => s + c.value, 0n);
   assert.equal(got, reward, '10% of each block found in the page');
+
+  step('paid');
+  // Analytics: an uncaught error (its message holds the address in the URL), then
+  // everything the page sent to PostHog.
+  await page.evaluate(() => setTimeout(() => {
+    throw new Error(`analytics test error on ${location.pathname}`);
+  }));
+  const expected = ['$pageview', 'wallet_created', 'backup_downloaded', 'words_shared', 'words_copied', 'payout_address_chosen', 'wallet_restored'];
+  expected.push('mining_consent_given', 'mining_started', 'mining_stopped', 'payout_checked', 'blocks_seen', '$exception');
+  const names = () => new Set(ph.events().map((e) => e.event));
+  try {
+    await until(() => expected.every((n) => names().has(n)), 30_000, 'the analytics events');
+  } catch (err) {
+    throw new Error(`${err.message}; got ${[...names()].join(', ')}\n${ph.received()}`);
+  }
+  const events = ph.events();
+  assert.deepEqual(new Set(events.map((e) => e.properties?.app)), new Set(['project-tau']), 'every event says which app sent it');
+  const sent = ph.requests.map((r) => r.text).join('\n');
+  assert.ok(!sent.includes(words.join(' ')), 'never the words');
+  for (let i = 1; i < words.length; i++) assert.ok(!sent.includes(`${words[i - 1]} ${words[i]}`), 'not even two of the words');
+  assert.ok(!sent.includes(address), "never the visitor's address");
+  assert.ok(!sent.includes(hour.address), 'never our address');
+  const pages = events.filter((e) => e.event === '$pageview').map((e) => new URL(e.properties.$current_url).pathname);
+  assert.ok(pages.includes('/mine/[address]') && pages.includes('/wallet'), pages.join(' '));
+  const exception = events.find((e) => e.event === '$exception');
+  assert.match(JSON.stringify(exception.properties.$exception_list), /analytics test error on \/mine\/\[address\]/);
+  assert.deepEqual(ph.requests.filter((r) => /\/(static|flags|decide|array)\b/.test(r.path)), [], 'no remote config or scripts from PostHog');
 });

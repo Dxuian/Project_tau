@@ -11,7 +11,10 @@ The top level holds only `tau-crypto/` (the library), `server/` (everything depl
 - **Everything runs in Docker.** Never run node, npm, tsc, emcc, wrangler, next or tests on the host. Library: `tau-crypto/dev <cmd>` (see `tau-crypto/CLAUDE.md`). Server: `server/dev <cmd>` (it uses the top-level `docker-compose.yml`, working directory `server/`).
 - **No live mining or real-network pool connections from this machine.** Tests use mocks, a private regtest bitcoind (`docker compose` service `bitcoind`: no peers, `-connect=0`), a local TiDB (service `tidb`, in memory) and local workerd via Miniflare / `wrangler dev`. Never `wrangler deploy`, `wrangler login`, `opennextjs-cloudflare deploy`, `vercel`, `server/dev db migrate` / `npm run db:migrate` or anything else that touches the user's TiDB Cloud: deployment is the user's step with their own accounts. The connection string (`DB_PASSWORD`) never goes into a file. wrangler and Next.js telemetry are off in the containers (`WRANGLER_SEND_METRICS`, `NEXT_TELEMETRY_DISABLED`).
 - **Consent-first:** nothing mines until a visitor starts it. Don't add stealth features.
-- Private repo, no license, not published. Dependencies are exact-pinned and installed with `--ignore-scripts`. The library's runtime dependencies need the AUDIT.md treatment; the site's framework dependencies (next, react, OpenNext) and the server's database packages (drizzle-orm, drizzle-kit, @tidbcloud/serverless) get `npm audit signatures`.
+- The GitHub repo is public (nothing secret goes in it), with no license, and is not published to npm. Dependencies are exact-pinned and installed with `--ignore-scripts`. The library's runtime dependencies need the AUDIT.md treatment. These get `npm audit signatures`:
+  - the site's framework dependencies (next, react, OpenNext);
+  - its analytics, posthog-js: a release at least a week old, with provenance;
+  - the server's database packages (drizzle-orm, drizzle-kit, @tidbcloud/serverless).
 
 ## Library vs server (keep this split)
 
@@ -38,11 +41,25 @@ The top level holds only `tau-crypto/` (the library), `server/` (everything depl
   - `site/`: the website, Next.js 16 App Router, plain JS.
     - Client components (`'use client'`) import `tau-crypto/wallet`.
     - The library is copied in, not linked: `scripts/copy-library.mjs` copies `tau-crypto/dist` (on every build) to `lib/tau-crypto/` (imported as `tau-crypto/*` through `jsconfig.json`) and `public/tau-crypto/` (the miner, which the mine page loads at run time, so it is never bundled). The app needs nothing outside its folder, which OpenNext requires.
-    - Server code reads `PAYOUT_API_URL`, `BRIDGE_URL`, `POOL_URL` and `NETWORK` at request time. `wrangler.jsonc` and `open-next.config.ts` are the Cloudflare (OpenNext) target; Vercel needs nothing extra.
+    - Server code reads `PAYOUT_API_URL`, `BRIDGE_URL`, `POOL_URL`, `NETWORK`, `POSTHOG_KEY` and `POSTHOG_HOST` at request time (the root layout is `force-dynamic` for this). `wrangler.jsonc` and `open-next.config.ts` are the Cloudflare (OpenNext) target; Vercel needs nothing extra.
+    - `wrangler.jsonc` has `global_fetch_strictly_public`: both Workers are on the same workers.dev subdomain, and without it the site's calls to the payout Worker fail (error 1042).
   - `test/`: server and site tests. `docker/bitcoind/`: the regtest node image.
 - Never re-add a facade that mixes client and server exports (the old `btc.js`): it breaks `'use client'` / `'use server'`.
 - Server code imports the library's committed `dist/`. After changing library code, run `tau-crypto/dev build` and commit `dist/`.
 - The payout Worker must not import `dist/index.js` (it would bundle the WASM miner). `server/test/regtest-worker.test.js` checks the bundle; `tau-crypto/test/entries.test.ts` checks that the edge entries carry no Node built-ins, WASM or Cloudflare names.
+
+## Analytics (PostHog, site only)
+
+The wallet page shows the visitor's 12 words, and the site promises they never leave the device. So `site/lib/analytics.js` sends only what the site chooses:
+- **Never re-enable page-reading features:** autocapture, session replay, heatmaps, surveys, exception autocapture (it loads a script), remote config (`advanced_disable_flags`), or external scripts (`disable_external_dependency_loading`).
+- **Events are explicit:** `track(name, props)` calls, page views and uncaught errors (`posthog.captureException` on the window's error events).
+- **Props never carry words or addresses.** `before_send` (`prepareEvent`) also replaces every Bitcoin address with `[address]` and adds `app: "project-tau"` to every event. The PostHog project is shared with the owner's other apps; `app` tells them apart.
+- **Keys:** only the public `phc_` project key goes in config (`POSTHOG_KEY`). The personal API key (`phx_`) never goes in the site, its settings or the repository.
+- **Tests:**
+  - `server/test/site.test.js` runs the whole flow against a stand-in PostHog (`startFakePostHog`). It fails if any request contains the words, two adjacent words or an address, or if PostHog's config or scripts are fetched.
+  - Playwright pages must open in `desktopContext(browser)`, from a browser launched with `DESKTOP_ARGS`. Otherwise posthog-js treats the browser as a bot (`navigator.webdriver`, or a HeadlessChrome user agent or brand) and sends nothing.
+  - The Cloudflare site test overrides `POSTHOG_KEY` / `POSTHOG_HOST`, so tests never send to the real PostHog.
+- **Source maps:** `productionBrowserSourceMaps` serves them publicly (the source is public), so PostHog's error tracking needs no upload step or CLI.
 
 ## Database (Drizzle)
 

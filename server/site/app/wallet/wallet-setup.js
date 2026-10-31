@@ -6,6 +6,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createWallet, isValidAddress, walletFromMnemonic } from 'tau-crypto/wallet.js';
+import { track } from '../../lib/analytics.js';
 import { backupFileName, backupText, readBackup } from '../../lib/backup.js';
 
 const SAVED = 'tau.address';
@@ -25,7 +26,9 @@ export default function WalletSetup({ network }) {
     }
   }, [network]);
 
-  const go = (address) => {
+  // `source`: how the visitor got the address (saved, typed, created, restored).
+  const go = (address, source) => {
+    track('payout_address_chosen', { source });
     localStorage.setItem(SAVED, JSON.stringify({ address, network }));
     router.push(`/mine/${address}`);
   };
@@ -41,7 +44,7 @@ export default function WalletSetup({ network }) {
           <p>
             This device remembers <span className="mono">{saved}</span>.
           </p>
-          <button className="primary" onClick={() => go(saved)}>
+          <button className="primary" onClick={() => go(saved, 'saved')}>
             Continue with it
           </button>
         </div>
@@ -57,9 +60,9 @@ export default function WalletSetup({ network }) {
           Restore from backup file
         </button>
       </div>
-      {mode === 'address' && <EnterAddress network={network} onDone={go} />}
-      {mode === 'create' && <CreateWallet network={network} onDone={go} />}
-      {mode === 'restore' && <RestoreWallet network={network} onDone={go} onError={setError} />}
+      {mode === 'address' && <EnterAddress network={network} onDone={(a) => go(a, 'typed')} />}
+      {mode === 'create' && <CreateWallet network={network} onDone={(a) => go(a, 'created')} />}
+      {mode === 'restore' && <RestoreWallet network={network} onDone={(a) => go(a, 'restored')} onError={setError} />}
       {error && <p className="error">{error}</p>}
     </>
   );
@@ -91,7 +94,14 @@ function CreateWallet({ network, onDone }) {
     return (
       <div className="panel">
         <p>This creates a new wallet in your browser. You get 12 words: they are the wallet. Nobody else, us included, ever sees them.</p>
-        <button className="primary" data-testid="create" onClick={() => setWallet(createWallet({ network }))}>
+        <button
+          className="primary"
+          data-testid="create"
+          onClick={() => {
+            setWallet(createWallet({ network }));
+            track('wallet_created');
+          }}
+        >
           Create my wallet
         </button>
       </div>
@@ -106,18 +116,22 @@ function CreateWallet({ network, onDone }) {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+    track('backup_downloaded');
   };
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(wallet.mnemonic);
       setCopied(true);
+      track('words_copied', { via: 'clipboard' });
     } catch {
       setSharing('text'); // no clipboard access: show the words to copy by hand
+      track('words_copied', { via: 'text_box' });
     }
   };
   // Phones get their share sheet (WhatsApp, Telegram, SMS...); laptops a text box.
   const share = async () => {
     const phone = typeof navigator.share === 'function' && window.matchMedia('(pointer: coarse)').matches;
+    track('words_shared', { via: phone ? 'share_sheet' : 'text_box' });
     if (!phone) return setSharing('text');
     setSharing(null);
     try {
@@ -195,10 +209,15 @@ function RestoreWallet({ network, onDone, onError }) {
     if (!file) return;
     try {
       const { words, network: inFile } = readBackup(await file.text());
-      if (inFile && inFile !== network) throw new Error(`that backup is for ${inFile}, and this site uses ${network}`);
+      if (inFile && inFile !== network) {
+        throw Object.assign(new Error(`that backup is for ${inFile}, and this site uses ${network}`), { reason: 'other_network' });
+      }
       setRestored(walletFromMnemonic(words, { network }).address);
+      track('wallet_restored');
     } catch (err) {
-      onError(/checksum|mnemonic/.test(err.message) ? "those aren't valid recovery words" : err.message);
+      const invalid = /checksum|mnemonic/.test(err.message);
+      track('wallet_restore_failed', { reason: err.reason ?? (invalid ? 'invalid_words' : 'unreadable') });
+      onError(invalid ? "those aren't valid recovery words" : err.message);
     }
   };
   return (

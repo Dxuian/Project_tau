@@ -23,6 +23,10 @@
     "PAYOUT_API_URL": "https://project-tau.deathxunnat.workers.dev",
     "BRIDGE_URL": "wss://project-tau.deathxunnat.workers.dev",
     "POOL_URL": "stratum+tcp://solo.ckpool.org:3333",
-    "NETWORK": "mainnet"
+    "NETWORK": "mainnet",
+    // PostHog (lib/analytics.js): the project's public key (phc_, made for browsers) and its US host.
+    // Its events carry app = "project-tau" (the project is shared with other apps).
+    "POSTHOG_KEY": "phc_t6eYwMbiKDVtNVmD3bZ8edgskcJpYRMPhAWnhQ3bEigB",
+    "POSTHOG_HOST": "https://us.i.posthog.com"
   }
 }

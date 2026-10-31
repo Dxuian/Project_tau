@@ -4,6 +4,7 @@
 // mines through the payout service's bridge, which logs it in with this hour's
 // address of ours (`slot`). Payout status comes from the site's /api/payout.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { track } from '../../../lib/analytics.js';
 
 const STATUS = {
   paid: 'Paid',
@@ -36,9 +37,18 @@ export default function Miner({ address, network, bridgeUrl, pool, minerUrl, slo
   const [error, setError] = useState('');
   const [payouts, setPayouts] = useState(null);
   const miner = useRef(null);
+  const startedAt = useRef(0);
+  const lastErrorEvent = useRef(0);
+  const blocksSeen = useRef(false);
 
   useEffect(() => () => void miner.current?.stop(), []);
 
+  // Miner errors repeat while it reconnects: at most one event a minute.
+  const reportError = (message) => {
+    if (Date.now() - lastErrorEvent.current < 60_000) return;
+    lastErrorEvent.current = Date.now();
+    track('mining_error', { error: String(message).slice(0, 200) });
+  };
   const start = async () => {
     setError('');
     setState('starting');
@@ -50,34 +60,58 @@ export default function Miner({ address, network, bridgeUrl, pool, minerUrl, slo
       m.on('state', setState);
       m.on('hashrate', (h) => setHps(h.hps));
       m.on('share', (s) => setShares((c) => (s.accepted ? { ...c, accepted: c.accepted + 1 } : { ...c, rejected: c.rejected + 1 })));
-      m.on('error', (e) => setError(e.message));
+      m.on('error', (e) => {
+        setError(e.message);
+        reportError(e.message);
+      });
       setState('running');
+      startedAt.current = Date.now();
+      track('mining_started', { throttle });
     } catch (err) {
       setError(err.message);
       setState('idle');
+      track('mining_start_failed', { error: String(err.message).slice(0, 200) });
     }
   };
   const stop = async () => {
     const m = miner.current;
     miner.current = null;
     await m?.stop();
+    track('mining_stopped', {
+      seconds: Math.round((Date.now() - startedAt.current) / 1000),
+      hashrate: Math.round(hps),
+      shares_accepted: shares.accepted,
+      shares_rejected: shares.rejected,
+    });
     setState('stopped');
     setHps(0);
   };
   const changeThrottle = (value) => {
     setThrottle(value);
     miner.current?.setThrottle(value);
+    track('mining_speed_changed', { throttle: value });
   };
 
   const check = useCallback(async () => {
+    let result;
     try {
       const res = await fetch('/api/payout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address }) });
       const body = await res.json().catch(() => ({}));
-      setPayouts(res.ok ? { results: body.results ?? [] } : { error: body.error ?? `error ${res.status}` });
+      result = res.ok ? { results: body.results ?? [] } : { error: body.error ?? `error ${res.status}` };
     } catch {
-      setPayouts({ error: 'the payout service is unreachable' });
+      result = { error: 'the payout service is unreachable' };
     }
+    setPayouts(result);
+    if (result.results?.length && !blocksSeen.current) {
+      blocksSeen.current = true;
+      track('blocks_seen', { count: result.results.length, statuses: [...new Set(result.results.map((r) => r.status))] });
+    }
+    return result;
   }, [address]);
+  const checkNow = async () => {
+    const result = await check();
+    track('payout_checked', { ok: !result.error, blocks: result.results?.length ?? null });
+  };
   useEffect(() => {
     check();
     const timer = setInterval(check, 5 * 60_000);
@@ -90,7 +124,16 @@ export default function Miner({ address, network, bridgeUrl, pool, minerUrl, slo
       <div className="panel">
         <h2>Mining</h2>
         <label className="check">
-          <input type="checkbox" checked={consent} disabled={running} onChange={(e) => setConsent(e.target.checked)} data-testid="consent" />
+          <input
+            type="checkbox"
+            checked={consent}
+            disabled={running}
+            onChange={(e) => {
+              setConsent(e.target.checked);
+              if (e.target.checked) track('mining_consent_given');
+            }}
+            data-testid="consent"
+          />
           <span>
             I agree to mine with this device. It uses the CPU (and power) while this page is open, and pauses when I switch away.
           </span>
@@ -146,7 +189,7 @@ export default function Miner({ address, network, bridgeUrl, pool, minerUrl, slo
             ))}
           </ul>
         )}
-        <button onClick={check} data-testid="check-payout">
+        <button onClick={checkNow} data-testid="check-payout">
           Check now
         </button>
       </div>

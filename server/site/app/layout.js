@@ -1,5 +1,10 @@
 import Link from 'next/link';
+import { analyticsConfig } from '../lib/config.js';
+import Analytics from './analytics.js';
 import './globals.css';
+
+// Rendered at request time, so a deployment's settings (POSTHOG_KEY) reach every page.
+export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'Project Tau: mine Bitcoin in your browser',
@@ -7,9 +12,11 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }) {
+  const analytics = analyticsConfig();
   return (
     <html lang="en">
       <body>
+        {analytics && <Analytics config={analytics} />}
         <header className="top">
           <Link href="/" className="brand">
             Project Tau
@@ -19,7 +26,10 @@ export default function RootLayout({ children }) {
           </nav>
         </header>
         <main>{children}</main>
-        <footer className="foot">Nothing mines until you press Start. Mining uses your device&apos;s CPU and power.</footer>
+        <footer className="foot">
+          Nothing mines until you press Start. Mining uses your device&apos;s CPU and power.
+          {analytics && ' We count visits and button presses with PostHog, never your words or your address.'}
+        </footer>
       </body>
     </html>
   );

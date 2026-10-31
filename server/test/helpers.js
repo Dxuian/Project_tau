@@ -1,11 +1,14 @@
-// Shared test helpers: a mock chain, an easy synthetic block, regtest access.
+// Shared test helpers: a mock chain, an easy synthetic block, regtest access,
+// a stand-in for PostHog.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 import { drizzle as drizzleD1 } from 'drizzle-orm/d1';
 import { migrate as migrateSqlite } from 'drizzle-orm/d1/migrator';
 import { drizzle as drizzleMysql } from 'drizzle-orm/mysql2';
@@ -213,4 +216,61 @@ export async function tidbTestDatabase(name) {
 /** Applies the D1 migrations (cloudflare/migrations) to a Miniflare D1 database, as `wrangler d1 migrations apply` does to a real one. */
 export async function migrateD1(binding) {
   await migrateSqlite(drizzleD1(binding), { migrationsFolder: D1_MIGRATIONS });
+}
+
+// Playwright's Chromium as an ordinary desktop browser, for the site tests:
+// posthog-js drops events from browsers that look automated (navigator.webdriver,
+// "HeadlessChrome" in the user agent or in navigator.userAgentData's brands).
+// Launch with DESKTOP_ARGS, then open pages in a desktopContext().
+export const DESKTOP_ARGS = Object.freeze(['--disable-blink-features=AutomationControlled']);
+export async function desktopContext(browser, options = {}) {
+  const userAgent = `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${browser.version()} Safari/537.36`;
+  const context = await browser.newContext({ ...options, userAgent });
+  await context.addInitScript(() => Object.defineProperty(Navigator.prototype, 'userAgentData', { get: () => undefined }));
+  return context;
+}
+
+/** A request body as posthog-js sends it: gzip, base64 form data (data=...) or plain JSON. */
+function postHogText(raw) {
+  if (raw[0] === 0x1f && raw[1] === 0x8b) return gunzipSync(raw).toString('utf8');
+  const text = raw.toString('utf8');
+  if (!text.startsWith('data=')) return text;
+  return Buffer.from(new URLSearchParams(text).get('data') ?? '', 'base64').toString('utf8');
+}
+
+/**
+ * A stand-in for PostHog's ingestion API, on 127.0.0.1 (point the site's
+ * POSTHOG_HOST at `url`). It records every request the page makes to it, with
+ * the body decoded (`text`), and answers like PostHog, CORS included.
+ * events(): every event received.
+ */
+export async function startFakePostHog() {
+  const requests = [];
+  const server = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    const { pathname } = new URL(req.url, 'http://localhost');
+    requests.push({ method: req.method, path: pathname, text: postHogText(Buffer.concat(chunks)) });
+    res.writeHead(req.method === 'OPTIONS' ? 204 : 200, {
+      'access-control-allow-origin': req.headers.origin ?? '*',
+      'access-control-allow-credentials': 'true',
+      'access-control-allow-headers': req.headers['access-control-request-headers'] ?? '*',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
+      'content-type': 'application/json',
+    });
+    res.end(req.method === 'OPTIONS' ? '' : '{"status":1}');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const events = () =>
+    requests.flatMap((r) => {
+      try {
+        const body = JSON.parse(r.text);
+        return (Array.isArray(body) ? body : (body.batch ?? [body])).filter((e) => typeof e?.event === 'string');
+      } catch {
+        return [];
+      }
+    });
+  /** What arrived, for failure messages. */
+  const received = () => requests.map((r) => `${r.method} ${r.path} ${r.text.slice(0, 160)}`).join('\n') || 'no requests';
+  return { url: `http://127.0.0.1:${server.address().port}`, requests, events, received, close: () => new Promise((r) => server.close(r)) };
 }

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { isValidAddress } from 'tau-crypto/wallet.js';
 import { siteConfig } from '../../../lib/config.js';
 import { miningAddress } from '../../../lib/payout-api.js';
+import { TrackOnce } from '../../analytics.js';
 import Miner from './miner.js';
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,10 @@ export default async function MinePage({ params }) {
             found it, then send you 10%.
           </p>
         ) : (
-          <p className="error">Mining is unavailable right now ({problem}). Try again in a minute.</p>
+          <>
+            <p className="error">Mining is unavailable right now ({problem}). Try again in a minute.</p>
+            <TrackOnce event="mining_unavailable" />
+          </>
         )}
       </div>
       {mining && (

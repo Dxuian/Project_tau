@@ -22,3 +22,21 @@ export function siteConfig(env = process.env) {
     minerUrl: env.MINER_URL || '/tau-crypto/index.js',
   };
 }
+
+/**
+ * Every event carries `app` with this value: the PostHog project is shared with
+ * the owner's other apps, and this is how this site's events are told apart.
+ */
+export const ANALYTICS_APP = 'project-tau';
+
+/**
+ * PostHog, for the browser: POSTHOG_KEY (the project's public phc_ key) and
+ * POSTHOG_HOST (default PostHog US). Analytics is off when the key is unset or
+ * malformed; it never stops the site from working.
+ */
+export function analyticsConfig(env = process.env) {
+  const key = String(env.POSTHOG_KEY ?? '').trim();
+  const host = String(env.POSTHOG_HOST || 'https://us.i.posthog.com').replace(/\/+$/, '');
+  if (!/^phc_[A-Za-z0-9]+$/.test(key) || !/^https?:\/\//.test(host)) return null;
+  return { key, host, app: ANALYTICS_APP, network: env.NETWORK || 'mainnet' };
+}
