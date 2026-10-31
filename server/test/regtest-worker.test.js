@@ -1,4 +1,4 @@
-// End to end, Cloudflare target: server/cloudflare/worker.js, bundled by
+// End to end, Cloudflare target: cloudflare/worker.js, bundled by
 // wrangler as `wrangler deploy` would, runs in workerd via Miniflare with D1
 // and Workers TCP sockets.
 // The real miner mines through it to a regtest pool; POST /payout on the Worker
@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Miniflare } from 'miniflare';
-import { accountXpub, createWallet, newAddress } from '../tau-crypto/dist/wallet.js';
+import { accountXpub, createWallet, newAddress } from '../../tau-crypto/dist/wallet.js';
 import { startRegtestPool } from './regtest-pool.js';
 import { FAST_SLOTS, mineBlocks, nodeReady, ownerReward, regtest, regtestChainEnv, slotAddresses } from './helpers.js';
 
@@ -23,7 +23,7 @@ const core = regtest();
 function bundleWorker(t) {
   const out = mkdtempSync(join(tmpdir(), 'tau-worker-'));
   t.after(() => rmSync(out, { recursive: true, force: true }));
-  const r = spawnSync('npx', ['wrangler', 'deploy', '--dry-run', '--config', 'server/cloudflare/wrangler.toml', '--outdir', out], {
+  const r = spawnSync('npx', ['wrangler', 'deploy', '--dry-run', '--config', 'cloudflare/wrangler.toml', '--outdir', out], {
     cwd: ROOT,
     encoding: 'utf8',
     env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: '1', HOME: out },
@@ -106,7 +106,7 @@ test("the Worker's Cloudflare glue in workerd: origin and target refusals, 502 f
   assert.equal(health.canPay, false, 'no OWNER_MNEMONIC: records only');
 });
 
-test('Cloudflare target: a visitor mines to a fresh owner address through the Worker and is paid 10%, once', { skip: !core && 'BITCOIND_RPC not set (run ./dev test)', timeout: 300_000 }, async (t) => {
+test('Cloudflare target: a visitor mines to a fresh owner address through the Worker and is paid 10%, once', { skip: !core && 'BITCOIND_RPC not set (run server/dev test)', timeout: 300_000 }, async (t) => {
   await nodeReady(core);
   const { out } = bundleWorker(t);
   const owner = createWallet({ network: 'regtest' });

@@ -1,11 +1,11 @@
 // loadConfig(): every setting is a parameter, and bad settings fail clearly.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { poolTarget } from '../tau-crypto/dist/bridge.js';
-import { memoryStores } from '../tau-crypto/dist/payouts.js';
-import { accountXpub, createWallet, newAddress } from '../tau-crypto/dist/wallet.js';
-import { createPayoutApi } from '../server/api.js';
-import { loadConfig } from '../server/config.js';
+import { poolTarget } from '../../tau-crypto/dist/bridge.js';
+import { memoryStores } from '../../tau-crypto/dist/payouts.js';
+import { accountXpub, createWallet, newAddress } from '../../tau-crypto/dist/wallet.js';
+import { createPayoutApi } from '../api.js';
+import { loadConfig } from '../config.js';
 import { OWNER, OWNER_WORDS } from './helpers.js';
 
 test('defaults, and overrides from the environment', () => {

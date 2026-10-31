@@ -9,7 +9,7 @@ usage() {
 usage: ./dev <command> [args]
 
   setup          build the Docker images and install dev dependencies
-  vendor         copy pinned cpuminer-opt sources from ../cpuminer-opt
+  vendor         fetch pinned cpuminer-opt (b34565b) into the cache volume, copy it to native/vendor/
   wasm [args]    compile the WASM variants (scripts/build-wasm.mjs)
   golden         build+run the native reference harness (amd64 and arm64)
   build          build dist/ (embeds the WASM, bundles workers)

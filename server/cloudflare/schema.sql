@@ -1,5 +1,5 @@
 -- D1 schema for the Cloudflare target (worker.js also creates it on first use).
--- Apply ahead of time with: npx wrangler d1 execute tau-payouts --remote --file server/cloudflare/schema.sql -c server/cloudflare/wrangler.toml
+-- Apply ahead of time with: npx wrangler d1 execute tau-payouts --remote --file cloudflare/schema.sql -c cloudflare/wrangler.toml (from server/)
 CREATE TABLE IF NOT EXISTS shares (id TEXT PRIMARY KEY, visitor TEXT NOT NULL, block_hash TEXT NOT NULL, is_block INTEGER NOT NULL, time TEXT NOT NULL, record TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS shares_blocks ON shares (is_block, visitor);
 CREATE INDEX IF NOT EXISTS shares_block_hash ON shares (block_hash);

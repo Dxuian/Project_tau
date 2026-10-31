@@ -10,13 +10,13 @@ import { tmpdir } from 'node:os';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
-import { createWallet } from '../tau-crypto/dist/wallet.js';
-import { loadConfig } from '../server/config.js';
-import { startNodeServer } from '../server/node/index.js';
+import { createWallet } from '../../tau-crypto/dist/wallet.js';
+import { loadConfig } from '../config.js';
+import { startNodeServer } from '../node/index.js';
 import { startRegtestPool } from './regtest-pool.js';
 import { FAST_SLOTS, nodeReady, regtest, regtestChainEnv, slotAddresses, until } from './helpers.js';
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const ROOT = fileURLToPath(new URL('../..', import.meta.url)); // the repository: the page loads /tau-crypto/dist/
 const core = regtest();
 const PAGE = `<!doctype html><meta charset="utf-8"><script type="module">
 import { mineBTC } from '/tau-crypto/dist/index.js';
@@ -68,7 +68,7 @@ after(async () => {
   await new Promise((r) => site?.close(r));
 });
 
-test('a page mines a block through the payout bridge and asks for its payout', { skip: !core && 'BITCOIND_RPC not set (run ./dev test)', timeout: 240_000 }, async (t) => {
+test('a page mines a block through the payout bridge and asks for its payout', { skip: !core && 'BITCOIND_RPC not set (run server/dev test)', timeout: 240_000 }, async (t) => {
   await nodeReady(core);
   const owner = createWallet({ network: 'regtest' });
   const visitor = await page.evaluate(() => window.T.wallet());

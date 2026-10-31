@@ -17,7 +17,6 @@ services:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     volumes:
       - .:/src
-      - ../cpuminer-opt:/upstream:ro
       - node_modules:/src/node_modules
       - emcache:/emsdk/upstream/emscripten/cache
       - cache:/cache

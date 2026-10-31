@@ -1,8 +1,8 @@
 // Shared test helpers: a mock chain, an easy synthetic block, regtest access.
 import { createHash } from 'node:crypto';
-import { mineBTC } from '../tau-crypto/dist/index.js';
-import { addressSlot, rebuildBlockHeader } from '../tau-crypto/dist/payouts.js';
-import { addressScript, bitcoinCore, newAddress } from '../tau-crypto/dist/wallet.js';
+import { mineBTC } from '../../tau-crypto/dist/index.js';
+import { addressSlot, rebuildBlockHeader } from '../../tau-crypto/dist/payouts.js';
+import { addressScript, bitcoinCore, newAddress } from '../../tau-crypto/dist/wallet.js';
 
 export const OWNER_WORDS = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 export const OWNER = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
@@ -112,7 +112,7 @@ export function mockChainWith(found, { tip = 1099 } = {}) {
   return chain;
 }
 
-/** The regtest node started by ./dev test, or null. */
+/** The regtest node started by server/dev test, or null. */
 export function regtest() {
   const url = process.env.BITCOIND_RPC;
   return url ? bitcoinCore({ url, user: process.env.BITCOIND_USER, pass: process.env.BITCOIND_PASS }) : null;

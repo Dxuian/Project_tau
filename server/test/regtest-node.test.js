@@ -8,15 +8,15 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createWallet, newAddress } from '../tau-crypto/dist/wallet.js';
-import { loadConfig } from '../server/config.js';
-import { startNodeServer } from '../server/node/index.js';
+import { createWallet, newAddress } from '../../tau-crypto/dist/wallet.js';
+import { loadConfig } from '../config.js';
+import { startNodeServer } from '../node/index.js';
 import { startRegtestPool } from './regtest-pool.js';
 import { FAST_SLOTS, mineBlocks, nextSlot, nodeReady, ownerReward, regtest, regtestChainEnv, slotAddresses } from './helpers.js';
 
 const core = regtest();
 
-test('Node target: a visitor mines to a fresh owner address and is paid 10% of each block, once, from it', { skip: !core && 'BITCOIND_RPC not set (run ./dev test)', timeout: 300_000 }, async (t) => {
+test('Node target: a visitor mines to a fresh owner address and is paid 10% of each block, once, from it', { skip: !core && 'BITCOIND_RPC not set (run server/dev test)', timeout: 300_000 }, async (t) => {
   await nodeReady(core);
   const owner = createWallet({ network: 'regtest' });
   const visitor = createWallet({ network: 'regtest' });

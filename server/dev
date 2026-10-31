@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# Host entry point for the top-level project. It only calls `docker compose`;
-# installs, builds and tests run inside the containers in docker-compose.yml.
+# Host entry point for server/. It only calls `docker compose` (with the
+# repository's docker-compose.yml); installs, builds and tests run inside the
+# containers, with server/ as the working directory.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 usage() {
   cat <<'USAGE'
-usage: ./dev <command> [args]
+usage: server/dev <command> [args]
 
   setup          build the regtest bitcoind image and install dependencies
-  test [files]   run the tests (starts a fresh private regtest bitcoind)
-  bundle         bundle server/cloudflare/worker.js as `wrangler deploy` would (into .wrangler/bundle)
+  test [files]   run the tests (starts a fresh private regtest bitcoind); files as test/x.test.js
+  bundle         bundle cloudflare/worker.js as `wrangler deploy` would (into server/.wrangler/bundle)
   site build     build the website (site/) for Node and Vercel (next build)
   site cf-build  build the website for Cloudflare Workers (OpenNext, into site/.open-next)
-  shell [cmd]    open a shell (or run cmd) in the app container
+  shell [cmd]    open a shell (or run cmd) in the app container, in server/
   down           stop the regtest bitcoind
 
 The library's own commands (build, its tests, the dependency audit) are in
@@ -47,7 +48,7 @@ case "$cmd" in
     trap 'docker compose stop bitcoind >/dev/null 2>&1 || true' EXIT
     if [ $# -eq 0 ]; then run app npm test; else run app node --test --test-concurrency=1 "$@"; fi
     ;;
-  bundle)       run app npx wrangler deploy --dry-run --config server/cloudflare/wrangler.toml --outdir /repo/.wrangler/bundle ;;
+  bundle)       run app npx wrangler deploy --dry-run --config cloudflare/wrangler.toml --outdir /repo/server/.wrangler/bundle ;;
   site)
     case "${1:-}" in
       build)    run app sh -c "cd site && npm run build" ;;

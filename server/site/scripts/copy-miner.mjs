@@ -5,7 +5,7 @@
 import { cpSync, existsSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const from = fileURLToPath(new URL('../../tau-crypto/dist/', import.meta.url));
+const from = fileURLToPath(new URL('../../../tau-crypto/dist/', import.meta.url));
 const to = fileURLToPath(new URL('../public/tau-crypto/', import.meta.url));
 if (!existsSync(`${from}index.js`)) throw new Error(`no built library at ${from}: run tau-crypto/dev build`);
 rmSync(to, { recursive: true, force: true });

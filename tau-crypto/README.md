@@ -104,7 +104,7 @@ install on the host but Docker); commit the rebuilt `dist/` along with the chang
 
 ```sh
 ./dev setup        # build the images, install dev dependencies (once)
-./dev vendor       # copy the pinned cpuminer-opt sources from ../cpuminer-opt
+./dev vendor       # fetch the pinned cpuminer-opt sources (b34565b) into native/vendor/
 ./dev wasm         # compile the WASM variants
 ./dev build        # build dist/
 ./dev test         # Node test suite (incl. the golden tests)

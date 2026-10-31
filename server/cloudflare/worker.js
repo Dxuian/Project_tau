@@ -1,4 +1,4 @@
-// Cloudflare target: npx wrangler deploy -c server/cloudflare/wrangler.toml (see README).
+// Cloudflare target: npx wrangler deploy -c cloudflare/wrangler.toml, from server/ (see README).
 // One Worker serves the payout bridge (WebSocket upgrades) and the payout API
 // (POST /payout, GET /health); records live in D1; a cron trigger, if
 // configured, pays every visitor with a mature block.

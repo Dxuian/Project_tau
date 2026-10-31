@@ -11,15 +11,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
-import { createWallet } from '../tau-crypto/dist/wallet.js';
-import { loadConfig } from '../server/config.js';
-import { startNodeServer } from '../server/node/index.js';
+import { createWallet } from '../../tau-crypto/dist/wallet.js';
+import { loadConfig } from '../config.js';
+import { startNodeServer } from '../node/index.js';
 import { startRegtestPool } from './regtest-pool.js';
 import { nodeReady, ownerReward, regtest, regtestChainEnv, until } from './helpers.js';
 
 const SITE = fileURLToPath(new URL('../site/', import.meta.url));
 const core = regtest();
-const skip = !core && 'BITCOIND_RPC not set (run ./dev test)';
+const skip = !core && 'BITCOIND_RPC not set (run server/dev test)';
 
 /** Starts `next start` on a free port with these settings; resolves once it answers. */
 async function startSite(env, t) {

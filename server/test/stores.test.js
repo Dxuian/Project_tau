@@ -6,11 +6,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Miniflare } from 'miniflare';
-import { createWallet } from '../tau-crypto/dist/wallet.js';
-import { createPayoutApi } from '../server/api.js';
-import { d1Stores } from '../server/cloudflare/d1-stores.js';
-import { loadConfig } from '../server/config.js';
-import { fileStores } from '../server/node/file-stores.js';
+import { createWallet } from '../../tau-crypto/dist/wallet.js';
+import { createPayoutApi } from '../api.js';
+import { d1Stores } from '../cloudflare/d1-stores.js';
+import { loadConfig } from '../config.js';
+import { fileStores } from '../node/file-stores.js';
 import { OWNER, OWNER_WORDS, findBlockThrough, mockChainWith } from './helpers.js';
 
 let mf;

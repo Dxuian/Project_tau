@@ -9,13 +9,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Consent-first library:** nothing connects or hashes until `miner.start()`. Don't add stealth features (obfuscation, evading blockers/monitoring).
 - The package is `"private"` with no license field; it is not published.
 - **`dist/` is committed** (it's what websites serve and Node runs). After changing `src/`, `bin/` or `native/`, rebuild (`./dev wasm` for C changes, then `./dev build`) and commit `dist/` with the change.
-- **No platform code in the library.** Runtime pieces (opening a TCP socket, accepting a WebSocket upgrade) are parameters. The Cloudflare glue lives in `../server/cloudflare/`. `test/entries.test.ts` fails on `WebSocketPair`, `cloudflare:` or `cf-connecting-ip` anywhere in `src/` or `dist/`, and on Node built-ins or embedded WASM in the `wallet`, `payouts` and `bridge` entries, which must run on edge runtimes.
+- **No platform code in the library.** Runtime pieces (opening a TCP socket, accepting a WebSocket upgrade) are parameters. The Cloudflare glue lives in `../server/cloudflare/worker.js`. `test/entries.test.ts` fails on `WebSocketPair`, `cloudflare:` or `cf-connecting-ip` anywhere in `src/` or `dist/`, and on Node built-ins or embedded WASM in the `wallet`, `payouts` and `bridge` entries, which must run on edge runtimes.
 
 ## Commands
 
 ```sh
 ./dev setup          # build images (dev: emsdk+Node+gcc+Chromium; ref-amd64: Debian GCC) + npm install
-./dev vendor         # copy pinned cpuminer-opt (../cpuminer-opt @ b34565b) into native/vendor/
+./dev vendor         # fetch pinned cpuminer-opt (b34565b, git clone into the cache volume) and copy it into native/vendor/
 ./dev wasm           # patch + compile native/out/cmo-{sse41,sse42,avx2}.wasm, regenerate src/wasm/variants/ and src/algos.generated.ts
 ./dev golden         # native reference vectors: test/golden/golden-{arm64,x86,x86-avx2}.json (~4 min, needs the verthash dataset in the cache volume)
 ./dev build          # dist/ (esbuild; worker inlined as a string; one lazy chunk per WASM variant)
