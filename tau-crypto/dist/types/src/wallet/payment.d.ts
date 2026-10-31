@@ -13,6 +13,10 @@ export interface PaymentOptions {
     minConfirmations?: number;
     /** Coins ("txid:vout") not to spend, e.g. ones another payment already uses. */
     exclude?: Set<string>;
+    /** Receive indexes of the paying wallet whose coins may be spent. Default [0], its first address. */
+    from?: number[];
+    /** Receive index the change goes to. Default the first of `from`. */
+    changeIndex?: number;
 }
 export interface Payment {
     txid: string;

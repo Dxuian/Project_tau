@@ -10777,6 +10777,12 @@ var ACCOUNTS = {
   regtest: "m/84'/1'/0'"
 };
 var MAX_INDEX = 2 ** 31 - 1;
+var KEY_VERSIONS = {
+  xpub: { private: 76066276, public: 76067358 },
+  zpub: { private: 78791436, public: 78792518 },
+  tpub: { private: 70615956, public: 70617039 },
+  vpub: { private: 73341116, public: 73342198 }
+};
 function bitcoinNetwork(name = "mainnet") {
   const n = NETWORKS[name];
   if (!n) throw new Error(`unknown network "${name}" (mainnet, testnet or regtest)`);
@@ -10802,17 +10808,62 @@ function isValidAddress(address, network = "mainnet") {
 function normalizeWords(mnemonic) {
   return String(mnemonic ?? "").trim().toLowerCase().split(/\s+/).join(" ");
 }
-function deriveKey(mnemonic, network = "mainnet", passphrase = "", index = 0) {
+function checkIndex(index) {
+  if (!Number.isSafeInteger(index) || index < 0 || index > MAX_INDEX) throw new Error(`index must be a whole number from 0 to ${MAX_INDEX}`);
+}
+function seedOf(mnemonic, passphrase) {
   const words = normalizeWords(mnemonic);
   if (!validateMnemonic(words, wordlist)) throw new Error("invalid mnemonic (unknown word or bad checksum)");
-  if (!Number.isSafeInteger(index) || index < 0 || index > MAX_INDEX) throw new Error(`index must be a whole number from 0 to ${MAX_INDEX}`);
+  return mnemonicToSeedSync(words, passphrase);
+}
+function walletKeys(mnemonic, network = "mainnet", passphrase = "") {
+  const seed = seedOf(mnemonic, passphrase);
   const net = bitcoinNetwork(network);
-  const path = `${ACCOUNTS[network]}/0/${index}`;
-  const key = HDKey.fromMasterSeed(mnemonicToSeedSync(words, passphrase)).derive(path);
-  if (!key.publicKey || !key.privateKey) throw new Error("key derivation failed");
-  const payment = p2wpkh(key.publicKey, net);
-  if (!payment.address) throw new Error("key derivation failed");
-  return { path, address: payment.address, script: toHex(payment.script), privateKey: key.privateKey };
+  const receive = HDKey.fromMasterSeed(seed).derive(ACCOUNTS[network]).deriveChild(0);
+  return {
+    key(index) {
+      checkIndex(index);
+      const key = receive.deriveChild(index);
+      if (!key.publicKey || !key.privateKey) throw new Error("key derivation failed");
+      const payment = p2wpkh(key.publicKey, net);
+      if (!payment.address) throw new Error("key derivation failed");
+      return { path: `${ACCOUNTS[network]}/0/${index}`, address: payment.address, script: toHex(payment.script), privateKey: key.privateKey };
+    }
+  };
+}
+function deriveKey(mnemonic, network = "mainnet", passphrase = "", index = 0) {
+  return walletKeys(mnemonic, network, passphrase).key(index);
+}
+function watchKeys(xpub, network = "mainnet") {
+  const net = bitcoinNetwork(network);
+  const text = String(xpub ?? "").trim();
+  const prefix2 = text.slice(0, 4);
+  const allowed = network === "mainnet" ? ["xpub", "zpub"] : ["tpub", "vpub"];
+  if (!allowed.includes(prefix2)) throw new Error(`expected a ${network} account public key (${allowed.join(" or ")})`);
+  let account;
+  try {
+    account = HDKey.fromExtendedKey(text, KEY_VERSIONS[prefix2]);
+  } catch {
+    throw new Error(`invalid ${prefix2}`);
+  }
+  if (account.depth !== 3 || account.privateKey) throw new Error("expected an account public key (m/84'/coin'/account')");
+  const accountNo = account.index >= HARDENED_OFFSET ? account.index - HARDENED_OFFSET : account.index;
+  const coin = network === "mainnet" ? 0 : 1;
+  const receive = account.deriveChild(0);
+  return {
+    address(index) {
+      checkIndex(index);
+      const payment = p2wpkh(receive.deriveChild(index).publicKey, net);
+      if (!payment.address) throw new Error("key derivation failed");
+      return { address: payment.address, path: `m/84'/${coin}'/${accountNo}'/0/${index}`, script: toHex(payment.script) };
+    }
+  };
+}
+function accountXpub(mnemonic, { network = "mainnet", passphrase = "" } = {}) {
+  const seed = seedOf(mnemonic, passphrase);
+  bitcoinNetwork(network);
+  const versions = network === "mainnet" ? KEY_VERSIONS.xpub : KEY_VERSIONS.tpub;
+  return HDKey.fromMasterSeed(seed, versions).derive(ACCOUNTS[network]).publicExtendedKey;
 }
 function createWallet({ words = 12, network = "mainnet" } = {}) {
   if (words !== 12 && words !== 24) throw new Error("words must be 12 or 24");
@@ -10824,8 +10875,13 @@ function createWallet({ words = 12, network = "mainnet" } = {}) {
 function newAddress(wallet, { index } = {}) {
   const network = wallet.network ?? "mainnet";
   const next = index ?? (wallet.index ?? 0) + 1;
-  const { address, path } = deriveKey(wallet.mnemonic, network, "", next);
-  return { mnemonic: normalizeWords(wallet.mnemonic), address, path, network, index: next };
+  if ("xpub" in wallet && wallet.xpub !== void 0) {
+    const { address: address2, path: path2 } = watchKeys(wallet.xpub, network).address(next);
+    return { xpub: String(wallet.xpub).trim(), address: address2, path: path2, network, index: next };
+  }
+  const { mnemonic } = wallet;
+  const { address, path } = deriveKey(mnemonic, network, "", next);
+  return { mnemonic: normalizeWords(mnemonic), address, path, network, index: next };
 }
 function walletFromMnemonic(mnemonic, { network = "mainnet", passphrase = "" } = {}) {
   const { address, path } = deriveKey(mnemonic, network, passphrase);
@@ -10842,10 +10898,14 @@ export {
   concat,
   swap32,
   leBigInt,
+  MAX_INDEX,
   bitcoinNetwork,
   addressScript,
   isValidAddress,
+  walletKeys,
   deriveKey,
+  watchKeys,
+  accountXpub,
   createWallet,
   newAddress,
   walletFromMnemonic

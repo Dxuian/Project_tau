@@ -10,9 +10,19 @@ import { coinbaseOutputs, paidTo, rebuildBlockHeader, type JobFields } from './b
 import type { ShareRecord, ShareResult } from './stores.ts';
 import type { BridgeConnection, BridgeInterceptor } from '../bridge/core.ts';
 
+/** The pool login of a connection: the owner address its blocks pay, and its receive index. */
+export interface PoolLogin {
+  address: string;
+  index?: number;
+}
+
 export interface ShareAuditorOptions {
-  /** Address every visitor is logged in to the pool as: block rewards go to it. */
-  poolUser: string;
+  /**
+   * What visitors are logged in to the pool as, so block rewards go to it: one
+   * address for everyone, or a function giving each connection its own. The
+   * function is called once per connection, when it first authorizes.
+   */
+  poolUser: string | ((info: { visitor: string; connection: BridgeConnection }) => PoolLogin | Promise<PoolLogin>);
   network?: NetworkName;
   /** Stores a share; awaited before the share is forwarded to the pool. */
   onShare: (record: ShareRecord) => void | Promise<void>;
@@ -32,10 +42,9 @@ interface Job extends JobFields {
   clean: boolean;
   xn1: string;
   xn2Size: number;
-  ownerSats: bigint | null;
 }
 
-function validNotify(p: unknown): Omit<Job, 'xn1' | 'xn2Size' | 'ownerSats'> | null {
+function validNotify(p: unknown): Omit<Job, 'xn1' | 'xn2Size'> | null {
   if (!Array.isArray(p) || p.length < 9) return null;
   const [jobId, prevhash, coinb1, coinb2, merkle, version, nbits, , clean] = p;
   if (typeof jobId !== 'string' || !jobId || jobId.length > 128) return null;
@@ -53,12 +62,14 @@ function randomTag(): string {
 
 export function createShareAuditor(options: ShareAuditorOptions): (connection: BridgeConnection) => BridgeInterceptor {
   const { poolUser, network = 'mainnet', onShare, onResult, log = () => {}, maxSharesPer10s = 50 } = options;
-  const ownerScript = addressScript(poolUser, network);
+  const fixed = typeof poolUser === 'string' ? { address: poolUser, script: addressScript(poolUser, network) } : null;
+  if (!fixed && typeof poolUser !== 'function') throw new Error('poolUser must be an address or a function');
   if (typeof onShare !== 'function') throw new Error('onShare is required');
   const started = `${Date.now().toString(36)}${randomTag()}`;
 
   return (connection) => {
     let visitor: string | null = null;
+    let login: { address: string; index?: number; script: string } | null = fixed;
     let xn1: string | null = null;
     let xn2Size = 0;
     let difficulty: number | null = null;
@@ -106,11 +117,23 @@ export function createShareAuditor(options: ShareAuditorOptions): (connection: B
           const address = typeof params[0] === 'string' ? params[0].trim() : '';
           if (!isValidAddress(address, network)) return deny(id, `invalid payout address: expected a ${network} Bitcoin address`, 24);
           if (visitor && visitor !== address) return deny(id, 'one payout address per connection', 24);
+          if (!login && typeof poolUser === 'function') {
+            // This connection's pool login, fixed from now on.
+            try {
+              const chosen = await poolUser({ visitor: address, connection });
+              const index = chosen?.index;
+              if (index !== undefined && !(Number.isSafeInteger(index) && index >= 0)) throw new Error(`invalid receive index ${index}`);
+              login = { address: chosen.address, index, script: addressScript(chosen.address, network) };
+            } catch (err) {
+              log(`${connection.peer}: no pool login: ${(err as Error).message}`);
+              return deny(id, 'mining is unavailable right now', 20);
+            }
+          }
           visitor = address;
-          return forward('authorize', [poolUser, typeof params[1] === 'string' ? params[1].slice(0, 64) : 'x']);
+          return forward('authorize', [login!.address, typeof params[1] === 'string' ? params[1].slice(0, 64) : 'x']);
         }
         case 'mining.submit': {
-          if (!visitor) return deny(id, 'unauthorized worker', 24);
+          if (!visitor || !login) return deny(id, 'unauthorized worker', 24);
           if (params.length !== 5) return deny(id, 'version rolling is not supported');
           const [, jobId, xn2, ntime, nonce] = params;
           const job = typeof jobId === 'string' ? jobs.get(jobId) : undefined;
@@ -122,6 +145,12 @@ export function createShareAuditor(options: ShareAuditorOptions): (connection: B
           recent.push(now);
           const share = { xn1: job.xn1, xn2: xn2.toLowerCase(), ntime: ntime.toLowerCase(), nonce: nonce.toLowerCase() };
           const rebuilt = rebuildBlockHeader({ ...job, ...share });
+          let ownerSats: bigint | null = null;
+          try {
+            ownerSats = paidTo(coinbaseOutputs(rebuilt.coinbase), login.script);
+          } catch {
+            // not a parsable coinbase: shares on it can never be paid
+          }
           const shareId = `${started}-${connection.id}-${++shareCount}`;
           const record: ShareRecord = {
             type: 'share',
@@ -131,18 +160,20 @@ export function createShareAuditor(options: ShareAuditorOptions): (connection: B
             conn: connection.id,
             peer: connection.peer,
             visitor,
+            poolUser: login.address,
+            ...(login.index !== undefined ? { ownerIndex: login.index } : {}),
             jobId,
             job: { prevhash: job.prevhash, coinb1: job.coinb1, coinb2: job.coinb2, merkle: job.merkle, version: job.version, nbits: job.nbits },
             ...share,
             difficulty,
             blockHash: rebuilt.blockHash,
             isBlock: rebuilt.isBlock,
-            ownerSats: job.ownerSats === null ? null : String(job.ownerSats),
+            ownerSats: ownerSats === null ? null : String(ownerSats),
           };
           // Stored before the pool sees it: a block can't be found without its record.
           await onShare(record);
           if (rebuilt.isBlock) log(`block candidate ${rebuilt.blockHash} from ${visitor} (connection ${connection.id})`);
-          return forward('submit', [poolUser, jobId, share.xn2, share.ntime, share.nonce], shareId);
+          return forward('submit', [login.address, jobId, share.xn2, share.ntime, share.nonce], shareId);
         }
         default:
           return deny(id, `unsupported method ${method.slice(0, 64)}`);
@@ -160,15 +191,9 @@ export function createShareAuditor(options: ShareAuditorOptions): (connection: B
       if (msg.method === 'mining.notify') {
         const job = validNotify(msg.params);
         if (job && xn1 !== null) {
-          let ownerSats: bigint | null = null;
-          try {
-            ownerSats = paidTo(coinbaseOutputs(job.coinb1 + xn1 + '00'.repeat(xn2Size) + job.coinb2), ownerScript);
-          } catch {
-            // not a parsable coinbase: shares on it can never be paid
-          }
           if (job.clean) jobs.clear();
           jobs.delete(job.jobId);
-          jobs.set(job.jobId, { ...job, xn1, xn2Size, ownerSats });
+          jobs.set(job.jobId, { ...job, xn1, xn2Size });
           while (jobs.size > MAX_JOBS) jobs.delete(jobs.keys().next().value as string);
         }
       } else if (msg.method === 'mining.set_extranonce') {

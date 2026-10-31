@@ -2,7 +2,7 @@
 // found, exactly once. All policy comes in as parameters (who pays, what share,
 // where records live); the library stores nothing itself.
 import type { ChainClient } from '../wallet/chain.ts';
-import { addressScript, deriveKey, type NetworkName } from '../wallet/keys.ts';
+import { addressScript, MAX_INDEX, walletKeys, type DerivedKey, type NetworkName } from '../wallet/keys.ts';
 import { buildPayment, type Payment } from '../wallet/payment.ts';
 import { rebuildBlockHeader, verifyBlock, type RebuiltBlock } from './block.ts';
 import type { PayoutLedger, ShareStore } from './stores.ts';
@@ -11,7 +11,10 @@ export interface PayoutOptions {
   shares: ShareStore;
   ledger: PayoutLedger;
   chain: ChainClient;
-  /** Words of the wallet blocks pay (the bridge's pool user); it signs the payouts. */
+  /**
+   * Words of the wallet blocks pay. Each block is checked against, and paid
+   * from, the address of its share record's `ownerIndex` (0 when absent).
+   */
   ownerMnemonic: string;
   /** The visitor's share of the owner's block reward, whole percent 1..100. */
   sharePercent: number | bigint;
@@ -20,6 +23,8 @@ export interface PayoutOptions {
   minConfirmations?: number;
   feeRate?: number;
   maxFeeRate?: number;
+  /** Receive index of the owner wallet that payouts send their change to. Default 0, its first address. */
+  changeIndex?: number;
 }
 
 export type PayoutStatus = 'paid' | 'already-paid' | 'immature' | 'not-in-chain' | 'not-ours' | 'not-paid-yet' | 'needs-review';
@@ -29,6 +34,8 @@ export interface PayoutResult {
   status: PayoutStatus;
   height?: number;
   confirmations?: number;
+  /** The owner address the block pays. */
+  ownerAddress?: string;
   /** What the block paid the owner. */
   rewardSats?: bigint;
   /** The visitor's share of it. */
@@ -60,7 +67,9 @@ export function checkSharePercent(value: number | bigint): bigint {
  * Pays `address` its share of each block it found, at most once per block.
  * Every block is rebuilt from the recorded raw share fields (never from a stored
  * hash) and must be in the best chain with enough confirmations, with the
- * rebuilt coinbase, paying the owner. Returns one result per block candidate.
+ * rebuilt coinbase, paying the owner address of its record's receive index
+ * (derived from the words, never taken from the record). The payout spends
+ * from that address. Returns one result per block candidate.
  */
 export function verifyPayout(address: string, options: PayoutOptions): Promise<PayoutResult[]> {
   const network = options.network ?? 'mainnet';
@@ -69,31 +78,39 @@ export function verifyPayout(address: string, options: PayoutOptions): Promise<P
   const minConfirmations = options.minConfirmations ?? COINBASE_MATURITY;
   if (minConfirmations < COINBASE_MATURITY) throw new Error(`minConfirmations must be at least ${COINBASE_MATURITY}`);
   if (!options.shares || !options.ledger || !options.chain) throw new Error('shares, ledger and chain are required');
-  const owner = deriveKey(options.ownerMnemonic, network);
-  return serialized(options.ledger, () => settle(address, { ...options, network, minConfirmations }, owner.script, share));
+  const keys = walletKeys(options.ownerMnemonic, network);
+  return serialized(options.ledger, () => settle(address, { ...options, network, minConfirmations }, keys, share));
 }
 
 async function settle(
   address: string,
   options: PayoutOptions & { network: NetworkName; minConfirmations: number },
-  ownerScript: string,
+  keys: { key(index: number): DerivedKey },
   share: bigint,
 ): Promise<PayoutResult[]> {
   const { shares, ledger, chain } = options;
-  const blocks = new Map<string, RebuiltBlock>();
+  const blocks = new Map<string, { rebuilt: RebuiltBlock; index: number; poolUser?: string }>();
   for (const r of await shares.blocksFor(address)) {
     if (r.visitor !== address || !r.job) continue;
+    const index = r.ownerIndex ?? 0;
+    if (!Number.isSafeInteger(index) || index < 0 || index > MAX_INDEX) continue;
     let rebuilt: RebuiltBlock;
     try {
       rebuilt = rebuildBlockHeader({ ...r.job, xn1: r.xn1, xn2: r.xn2, ntime: r.ntime, nonce: r.nonce });
     } catch {
       continue;
     }
-    if (rebuilt.isBlock && rebuilt.blockHash === r.blockHash) blocks.set(rebuilt.blockHash, rebuilt);
+    if (rebuilt.isBlock && rebuilt.blockHash === r.blockHash) blocks.set(rebuilt.blockHash, { rebuilt, index, poolUser: r.poolUser });
   }
+  const owners = new Map<number, DerivedKey>();
+  const ownerAt = (index: number) => {
+    let key = owners.get(index);
+    if (!key) owners.set(index, (key = keys.key(index)));
+    return key;
+  };
 
   const results: PayoutResult[] = [];
-  for (const [blockHash, rebuilt] of blocks) {
+  for (const [blockHash, { rebuilt, index, poolUser }] of blocks) {
     const prior = await ledger.get(blockHash);
     if (prior) {
       results.push(
@@ -107,14 +124,19 @@ async function settle(
       results.push({ blockHash, status: 'needs-review', error: 'more than one visitor recorded for this block' });
       continue;
     }
-    const check = await verifyBlock(rebuilt, { chain, payToScript: ownerScript, minConfirmations: options.minConfirmations });
-    if (check.status !== 'verified') {
-      results.push({ blockHash, ...check });
+    const owner = ownerAt(index);
+    if (poolUser !== undefined && poolUser !== owner.address) {
+      results.push({ blockHash, status: 'not-ours', error: `the recorded pool login is not the owner wallet's address ${index}` });
       continue;
     }
-    const base = { blockHash, height: check.height, confirmations: check.confirmations, rewardSats: check.rewardSats };
+    const check = await verifyBlock(rebuilt, { chain, payToScript: owner.script, minConfirmations: options.minConfirmations });
+    if (check.status !== 'verified') {
+      results.push({ blockHash, ownerAddress: owner.address, ...check });
+      continue;
+    }
+    const base = { blockHash, ownerAddress: owner.address, height: check.height, confirmations: check.confirmations, rewardSats: check.rewardSats };
     const payoutSats = (check.rewardSats * share) / 100n;
-    results.push(await pay(address, payoutSats, base, options));
+    results.push(await pay(address, payoutSats, base, index, options));
   }
   return results;
 }
@@ -122,7 +144,8 @@ async function settle(
 async function pay(
   address: string,
   payoutSats: bigint,
-  base: { blockHash: string; height: number; confirmations: number; rewardSats: bigint },
+  base: { blockHash: string; ownerAddress: string; height: number; confirmations: number; rewardSats: bigint },
+  fromIndex: number,
   options: PayoutOptions & { network: NetworkName },
 ): Promise<PayoutResult> {
   const { ledger, chain } = options;
@@ -139,6 +162,9 @@ async function pay(
         feeRate: options.feeRate,
         maxFeeRate: options.maxFeeRate,
         exclude: await ledger.usedInputs(),
+        // The block's own reward pays the visitor; the rest goes to the change address.
+        from: [fromIndex],
+        changeIndex: options.changeIndex ?? 0,
       });
     } catch (err) {
       return { ...entry, status: 'not-paid-yet', error: (err as Error).message };

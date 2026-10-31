@@ -1,10 +1,10 @@
 import {
   buildPayment
-} from "./chunks/chunk-E3XZQTDT.js";
+} from "./chunks/chunk-6AQT565A.js";
 import {
+  MAX_INDEX,
   addressScript,
   concat,
-  deriveKey,
   fromHex,
   isHex,
   isValidAddress,
@@ -13,8 +13,9 @@ import {
   sha256d,
   swap32,
   toHex,
-  walletFromMnemonic
-} from "./chunks/chunk-APBMG6TN.js";
+  walletKeys,
+  watchKeys
+} from "./chunks/chunk-PS4DJKB4.js";
 
 // src/payouts/block.ts
 function nbitsTarget(nbits) {
@@ -118,11 +119,13 @@ function randomTag() {
 function createShareAuditor(options) {
   const { poolUser, network = "mainnet", onShare, onResult, log = () => {
   }, maxSharesPer10s = 50 } = options;
-  const ownerScript = addressScript(poolUser, network);
+  const fixed = typeof poolUser === "string" ? { address: poolUser, script: addressScript(poolUser, network) } : null;
+  if (!fixed && typeof poolUser !== "function") throw new Error("poolUser must be an address or a function");
   if (typeof onShare !== "function") throw new Error("onShare is required");
   const started = `${Date.now().toString(36)}${randomTag()}`;
   return (connection) => {
     let visitor = null;
+    let login = fixed;
     let xn1 = null;
     let xn2Size = 0;
     let difficulty = null;
@@ -166,11 +169,22 @@ function createShareAuditor(options) {
           const address = typeof params[0] === "string" ? params[0].trim() : "";
           if (!isValidAddress(address, network)) return deny(id, `invalid payout address: expected a ${network} Bitcoin address`, 24);
           if (visitor && visitor !== address) return deny(id, "one payout address per connection", 24);
+          if (!login && typeof poolUser === "function") {
+            try {
+              const chosen = await poolUser({ visitor: address, connection });
+              const index = chosen?.index;
+              if (index !== void 0 && !(Number.isSafeInteger(index) && index >= 0)) throw new Error(`invalid receive index ${index}`);
+              login = { address: chosen.address, index, script: addressScript(chosen.address, network) };
+            } catch (err) {
+              log(`${connection.peer}: no pool login: ${err.message}`);
+              return deny(id, "mining is unavailable right now", 20);
+            }
+          }
           visitor = address;
-          return forward("authorize", [poolUser, typeof params[1] === "string" ? params[1].slice(0, 64) : "x"]);
+          return forward("authorize", [login.address, typeof params[1] === "string" ? params[1].slice(0, 64) : "x"]);
         }
         case "mining.submit": {
-          if (!visitor) return deny(id, "unauthorized worker", 24);
+          if (!visitor || !login) return deny(id, "unauthorized worker", 24);
           if (params.length !== 5) return deny(id, "version rolling is not supported");
           const [, jobId, xn2, ntime, nonce] = params;
           const job = typeof jobId === "string" ? jobs.get(jobId) : void 0;
@@ -182,6 +196,11 @@ function createShareAuditor(options) {
           recent.push(now);
           const share = { xn1: job.xn1, xn2: xn2.toLowerCase(), ntime: ntime.toLowerCase(), nonce: nonce.toLowerCase() };
           const rebuilt = rebuildBlockHeader({ ...job, ...share });
+          let ownerSats = null;
+          try {
+            ownerSats = paidTo(coinbaseOutputs(rebuilt.coinbase), login.script);
+          } catch {
+          }
           const shareId = `${started}-${connection.id}-${++shareCount}`;
           const record = {
             type: "share",
@@ -191,17 +210,19 @@ function createShareAuditor(options) {
             conn: connection.id,
             peer: connection.peer,
             visitor,
+            poolUser: login.address,
+            ...login.index !== void 0 ? { ownerIndex: login.index } : {},
             jobId,
             job: { prevhash: job.prevhash, coinb1: job.coinb1, coinb2: job.coinb2, merkle: job.merkle, version: job.version, nbits: job.nbits },
             ...share,
             difficulty,
             blockHash: rebuilt.blockHash,
             isBlock: rebuilt.isBlock,
-            ownerSats: job.ownerSats === null ? null : String(job.ownerSats)
+            ownerSats: ownerSats === null ? null : String(ownerSats)
           };
           await onShare(record);
           if (rebuilt.isBlock) log(`block candidate ${rebuilt.blockHash} from ${visitor} (connection ${connection.id})`);
-          return forward("submit", [poolUser, jobId, share.xn2, share.ntime, share.nonce], shareId);
+          return forward("submit", [login.address, jobId, share.xn2, share.ntime, share.nonce], shareId);
         }
         default:
           return deny(id, `unsupported method ${method.slice(0, 64)}`);
@@ -218,14 +239,9 @@ function createShareAuditor(options) {
       if (msg.method === "mining.notify") {
         const job = validNotify(msg.params);
         if (job && xn1 !== null) {
-          let ownerSats = null;
-          try {
-            ownerSats = paidTo(coinbaseOutputs(job.coinb1 + xn1 + "00".repeat(xn2Size) + job.coinb2), ownerScript);
-          } catch {
-          }
           if (job.clean) jobs.clear();
           jobs.delete(job.jobId);
-          jobs.set(job.jobId, { ...job, xn1, xn2Size, ownerSats });
+          jobs.set(job.jobId, { ...job, xn1, xn2Size });
           while (jobs.size > MAX_JOBS) jobs.delete(jobs.keys().next().value);
         }
       } else if (msg.method === "mining.set_extranonce") {
@@ -289,24 +305,32 @@ function verifyPayout(address, options) {
   const minConfirmations = options.minConfirmations ?? COINBASE_MATURITY;
   if (minConfirmations < COINBASE_MATURITY) throw new Error(`minConfirmations must be at least ${COINBASE_MATURITY}`);
   if (!options.shares || !options.ledger || !options.chain) throw new Error("shares, ledger and chain are required");
-  const owner = deriveKey(options.ownerMnemonic, network);
-  return serialized(options.ledger, () => settle(address, { ...options, network, minConfirmations }, owner.script, share));
+  const keys = walletKeys(options.ownerMnemonic, network);
+  return serialized(options.ledger, () => settle(address, { ...options, network, minConfirmations }, keys, share));
 }
-async function settle(address, options, ownerScript, share) {
+async function settle(address, options, keys, share) {
   const { shares, ledger, chain } = options;
   const blocks = /* @__PURE__ */ new Map();
   for (const r of await shares.blocksFor(address)) {
     if (r.visitor !== address || !r.job) continue;
+    const index = r.ownerIndex ?? 0;
+    if (!Number.isSafeInteger(index) || index < 0 || index > MAX_INDEX) continue;
     let rebuilt;
     try {
       rebuilt = rebuildBlockHeader({ ...r.job, xn1: r.xn1, xn2: r.xn2, ntime: r.ntime, nonce: r.nonce });
     } catch {
       continue;
     }
-    if (rebuilt.isBlock && rebuilt.blockHash === r.blockHash) blocks.set(rebuilt.blockHash, rebuilt);
+    if (rebuilt.isBlock && rebuilt.blockHash === r.blockHash) blocks.set(rebuilt.blockHash, { rebuilt, index, poolUser: r.poolUser });
   }
+  const owners = /* @__PURE__ */ new Map();
+  const ownerAt = (index) => {
+    let key = owners.get(index);
+    if (!key) owners.set(index, key = keys.key(index));
+    return key;
+  };
   const results = [];
-  for (const [blockHash, rebuilt] of blocks) {
+  for (const [blockHash, { rebuilt, index, poolUser }] of blocks) {
     const prior = await ledger.get(blockHash);
     if (prior) {
       results.push(
@@ -318,18 +342,23 @@ async function settle(address, options, ownerScript, share) {
       results.push({ blockHash, status: "needs-review", error: "more than one visitor recorded for this block" });
       continue;
     }
-    const check = await verifyBlock(rebuilt, { chain, payToScript: ownerScript, minConfirmations: options.minConfirmations });
-    if (check.status !== "verified") {
-      results.push({ blockHash, ...check });
+    const owner = ownerAt(index);
+    if (poolUser !== void 0 && poolUser !== owner.address) {
+      results.push({ blockHash, status: "not-ours", error: `the recorded pool login is not the owner wallet's address ${index}` });
       continue;
     }
-    const base = { blockHash, height: check.height, confirmations: check.confirmations, rewardSats: check.rewardSats };
-    const payoutSats = check.rewardSats * share / 100n;
-    results.push(await pay(address, payoutSats, base, options));
+    const check2 = await verifyBlock(rebuilt, { chain, payToScript: owner.script, minConfirmations: options.minConfirmations });
+    if (check2.status !== "verified") {
+      results.push({ blockHash, ownerAddress: owner.address, ...check2 });
+      continue;
+    }
+    const base = { blockHash, ownerAddress: owner.address, height: check2.height, confirmations: check2.confirmations, rewardSats: check2.rewardSats };
+    const payoutSats = check2.rewardSats * share / 100n;
+    results.push(await pay(address, payoutSats, base, index, options));
   }
   return results;
 }
-async function pay(address, payoutSats, base, options) {
+async function pay(address, payoutSats, base, fromIndex, options) {
   const { ledger, chain } = options;
   const entry = { ...base, payoutSats };
   let built;
@@ -342,7 +371,10 @@ async function pay(address, payoutSats, base, options) {
         network: options.network,
         feeRate: options.feeRate,
         maxFeeRate: options.maxFeeRate,
-        exclude: await ledger.usedInputs()
+        exclude: await ledger.usedInputs(),
+        // The block's own reward pays the visitor; the rest goes to the change address.
+        from: [fromIndex],
+        changeIndex: options.changeIndex ?? 0
       });
     } catch (err) {
       return { ...entry, status: "not-paid-yet", error: err.message };
@@ -385,20 +417,64 @@ async function payoutAll(options) {
   return out;
 }
 
+// src/payouts/slots.ts
+function check({ periodMs, epochMs }) {
+  if (!Number.isSafeInteger(periodMs) || periodMs < 1e3) throw new Error("periodMs must be a whole number of ms, at least 1000");
+  if (!Number.isSafeInteger(epochMs) || epochMs < 0) throw new Error("epochMs must be a time in ms since 1970");
+}
+function addressSlot(time, options) {
+  check(options);
+  if (!Number.isFinite(time) || time < options.epochMs) throw new Error("time is before the address epoch");
+  const slot = 1 + Math.floor((time - options.epochMs) / options.periodMs);
+  if (slot > MAX_INDEX) throw new Error("no address slots left after this epoch");
+  return slot;
+}
+function slotTimes(slot, options) {
+  check(options);
+  if (!Number.isSafeInteger(slot) || slot < 1 || slot > MAX_INDEX) throw new Error(`slot must be a whole number from 1 to ${MAX_INDEX}`);
+  const from = options.epochMs + (slot - 1) * options.periodMs;
+  return { from, until: from + options.periodMs };
+}
+
 // src/payouts/service.ts
 function createPayoutService(options) {
-  const { ownerAddress, ownerMnemonic, shares, ledger, chain, network = "mainnet" } = options;
+  const { ownerAddress, ownerMnemonic, ownerXpub, addressPeriod, shares, ledger, chain, network = "mainnet", now = Date.now } = options;
   if (!isValidAddress(ownerAddress, network)) throw new Error(`ownerAddress must be a ${network} address`);
   if (!shares || !ledger) throw new Error("shares and ledger are required");
   checkSharePercent(options.sharePercent);
-  if (ownerMnemonic) {
-    if (walletFromMnemonic(ownerMnemonic, { network }).address !== ownerAddress) {
-      throw new Error("ownerMnemonic is not the wallet of ownerAddress (its first address)");
+  if (addressPeriod) addressSlot(addressPeriod.epochMs, addressPeriod);
+  const watch = ownerXpub ? watchKeys(ownerXpub, network) : null;
+  const keys = ownerMnemonic ? walletKeys(ownerMnemonic, network) : null;
+  if (keys && keys.key(0).address !== ownerAddress) throw new Error("ownerMnemonic is not the wallet of ownerAddress (its first address)");
+  if (watch && watch.address(0).address !== ownerAddress) throw new Error("ownerXpub is not the wallet of ownerAddress (its first address)");
+  if (ownerMnemonic && !chain) throw new Error("a chain client is required to pay");
+  if (addressPeriod && !watch && !keys) throw new Error("fresh addresses need ownerXpub or ownerMnemonic");
+  const addresses = /* @__PURE__ */ new Map();
+  const addressAt = (index) => {
+    let address = addresses.get(index);
+    if (address === void 0) {
+      address = watch ? watch.address(index).address : keys.key(index).address;
+      if (addresses.size >= 64) addresses.clear();
+      addresses.set(index, address);
     }
-    if (!chain) throw new Error("a chain client is required to pay");
-  }
+    return address;
+  };
+  const addressFor = (time = now()) => {
+    if (!addressPeriod) return { address: ownerAddress, index: 0, from: null, until: null };
+    const index = addressSlot(time, addressPeriod);
+    const { from, until } = slotTimes(index, addressPeriod);
+    return { address: addressAt(index), index, from: new Date(from).toISOString(), until: new Date(until).toISOString() };
+  };
   const intercept = createShareAuditor({
-    poolUser: ownerAddress,
+    // A connection may keep the slot its page was shown (?slot=N) if that is the
+    // current or the previous one: someone who loaded the page just before the
+    // hour turned still mines to the address they were shown.
+    poolUser: addressPeriod ? ({ connection }) => {
+      const current = addressSlot(now(), addressPeriod);
+      const asked = Number(connection.query.get("slot"));
+      const index = asked === current || asked === current - 1 && asked >= 1 ? asked : current;
+      return { address: addressAt(index), index };
+    } : ownerAddress,
     network,
     onShare: (record) => shares.add(record),
     onResult: (result) => shares.addResult?.(result),
@@ -416,13 +492,15 @@ function createPayoutService(options) {
       network,
       minConfirmations: options.minConfirmations,
       feeRate: options.feeRate,
-      maxFeeRate: options.maxFeeRate
+      maxFeeRate: options.maxFeeRate,
+      changeIndex: options.changeIndex
     };
   };
   return {
     ownerAddress,
     network,
     canPay: !!ownerMnemonic,
+    addressFor,
     intercept,
     verifyPayout: async (address) => verifyPayout(address, payoutOptions()),
     payoutAll: async () => payoutAll(payoutOptions())
@@ -484,6 +562,7 @@ function memoryStores() {
   return { shares, ledger };
 }
 export {
+  addressSlot,
   checkSharePercent,
   coinbaseOutputs,
   createPayoutService,
@@ -493,6 +572,7 @@ export {
   paidTo,
   payoutAll,
   rebuildBlockHeader,
+  slotTimes,
   verifyBlock,
   verifyPayout
 };

@@ -3433,7 +3433,7 @@ async function createMiner(options) {
 var DEFAULT_POOL = "stratum+tcp://solo.ckpool.org:3333";
 async function mineBTC(address, url, options = {}) {
   const { pool = DEFAULT_POOL, network = "mainnet", ...minerOptions } = options;
-  const { addressScript } = await import("./keys-EUEN7YJR.js");
+  const { addressScript } = await import("./keys-Z4WIK32I.js");
   addressScript(address, network);
   if (typeof url !== "string") throw new Error("url is required");
   const viaBridge = /^wss?:\/\//i.test(url);

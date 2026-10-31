@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { entropyToMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { HDKey } from '@scure/bip32';
-import { addressScript, createWallet, isValidAddress, newAddress, walletFromMnemonic } from '../src/wallet/index.ts';
+import { accountXpub, addressScript, createWallet, isValidAddress, newAddress, walletFromMnemonic } from '../src/wallet/index.ts';
 
 const ABANDON = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
@@ -131,4 +131,46 @@ test('address validation', () => {
   assert.ok(!isValidAddress('bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyv')); // checksum
   assert.ok(!isValidAddress('not an address'));
   assert.ok(!isValidAddress(42));
+});
+
+// BIP84's published account key for the ABANDON words (m/84'/0'/0'), in its SLIP-132 form.
+const BIP84_ZPUB = 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs';
+
+test('BIP84 test vector: the account zpub derives the receive addresses without the words', () => {
+  const first = newAddress({ xpub: BIP84_ZPUB }, { index: 0 });
+  assert.deepEqual(first, {
+    xpub: BIP84_ZPUB,
+    address: 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu',
+    path: "m/84'/0'/0'/0/0",
+    network: 'mainnet',
+    index: 0,
+  });
+  assert.equal(newAddress(first).address, 'bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g');
+  assert.equal(newAddress(first).path, "m/84'/0'/0'/0/1");
+  assert.ok(!('mnemonic' in first), 'watch-only: no words');
+});
+
+test('accountXpub gives the same addresses as the words', () => {
+  const xpub = accountXpub(ABANDON);
+  assert.match(xpub, /^xpub/);
+  for (const index of [0, 1, 7, 2 ** 31 - 1]) {
+    assert.equal(newAddress({ xpub }, { index }).address, newAddress({ mnemonic: ABANDON }, { index }).address, `index ${index}`);
+  }
+  const reg = createWallet({ network: 'regtest' });
+  const tpub = accountXpub(reg.mnemonic, { network: 'regtest' });
+  assert.match(tpub, /^tpub/);
+  assert.equal(newAddress({ xpub: tpub, network: 'regtest' }, { index: 0 }).address, reg.address);
+  assert.equal(newAddress({ xpub: tpub, network: 'regtest' }, { index: 3 }).address, newAddress(reg, { index: 3 }).address);
+});
+
+test('watch-only keys: refuses private keys, other networks, other depths and garbage', async () => {
+  const { HDKey } = await import('@scure/bip32');
+  const master = HDKey.fromMasterSeed(mnemonicToSeedSync(ABANDON));
+  const xpub = accountXpub(ABANDON);
+  assert.throws(() => newAddress({ xpub: master.derive("m/84'/0'/0'").privateExtendedKey }, { index: 0 }), /account public key/);
+  assert.throws(() => newAddress({ xpub, network: 'regtest' }, { index: 0 }), /regtest account public key/);
+  assert.throws(() => newAddress({ xpub: master.publicExtendedKey }, { index: 0 }), /account public key/, 'depth 0');
+  assert.throws(() => newAddress({ xpub: `${xpub.slice(0, -1)}x` }, { index: 0 }), /invalid xpub/);
+  assert.throws(() => newAddress({ xpub }, { index: 2 ** 31 }), /index must be a whole number/);
+  assert.throws(() => accountXpub('hello world'), /mnemonic/);
 });

@@ -9,6 +9,10 @@ export interface ShareRecord {
     peer: string;
     /** The payout address the visitor's connection authorized with. */
     visitor: string;
+    /** What the connection was logged in to the pool as: the owner address its blocks pay. Older records lack it. */
+    poolUser?: string;
+    /** That address's receive index in the owner wallet; older records mean 0. */
+    ownerIndex?: number;
     jobId: string;
     job: JobFields;
     xn1: string;

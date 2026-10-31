@@ -3,7 +3,7 @@ import {
   benchmark,
   createMiner,
   listAlgorithms
-} from "./chunks/chunk-UJPX5J72.js";
+} from "./chunks/chunk-GYPOAHJE.js";
 import {
   detect
 } from "./chunks/chunk-DMFZA2GS.js";

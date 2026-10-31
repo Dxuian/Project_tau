@@ -1,10 +1,11 @@
-// Sending BTC from a BIP84 wallet: our own largest-first coin selection
-// (btc-signer's selectUTXO is documented as unaudited), an upper-bound fee from
-// the transaction's size, change back to the wallet, signing with btc-signer.
+// Sending BTC from a BIP84 wallet's addresses: our own largest-first coin
+// selection (btc-signer's selectUTXO is documented as unaudited), an
+// upper-bound fee from the transaction's size, change back to the wallet, and
+// each input signed by btc-signer with the key of its address.
 import * as btc from '@scure/btc-signer';
 import { fromHex } from './bytes.ts';
-import type { ChainClient } from './chain.ts';
-import { addressScript, bitcoinNetwork, deriveKey, type NetworkName } from './keys.ts';
+import type { ChainClient, ChainUtxo } from './chain.ts';
+import { addressScript, bitcoinNetwork, walletKeys, type DerivedKey, type NetworkName } from './keys.ts';
 
 const DUST_SATS = 546n;
 const COINBASE_MATURITY = 100;
@@ -22,6 +23,10 @@ export interface PaymentOptions {
   minConfirmations?: number;
   /** Coins ("txid:vout") not to spend, e.g. ones another payment already uses. */
   exclude?: Set<string>;
+  /** Receive indexes of the paying wallet whose coins may be spent. Default [0], its first address. */
+  from?: number[];
+  /** Receive index the change goes to. Default the first of `from`. */
+  changeIndex?: number;
 }
 
 export interface Payment {
@@ -50,31 +55,37 @@ function estimateVsize(inputs: number, outputScripts: string[]): number {
 
 /** Builds and signs a payment without broadcasting it. */
 export async function buildPayment(to: string, amountSats: bigint | number, options: PaymentOptions): Promise<Payment> {
-  const { mnemonic, chain, network = 'mainnet', feeRate, maxFeeRate = 200, minConfirmations = 1, exclude = new Set() } = options;
+  const { mnemonic, chain, network = 'mainnet', feeRate, maxFeeRate = 200, minConfirmations = 1, exclude = new Set(), from = [0] } = options;
   const amount = sats(amountSats);
   if (amount < DUST_SATS) throw new Error(`amount below the dust limit (${DUST_SATS} sats)`);
   if (!chain) throw new Error('a chain client is required');
+  if (!Array.isArray(from) || from.length === 0) throw new Error('from must list at least one receive index');
   const toScript = addressScript(to, network);
-  const owner = deriveKey(mnemonic, network);
-  if (toScript === owner.script) throw new Error('refusing to pay the wallet itself');
+  const keys = walletKeys(mnemonic, network);
+  const sources = [...new Set(from)].map((index) => keys.key(index));
+  const changeKey = keys.key(options.changeIndex ?? from[0]);
+  if (toScript === changeKey.script || sources.some((s) => s.script === toScript)) throw new Error('refusing to pay the wallet itself');
   const rate = Number(feeRate ?? (await chain.feeRate()));
   if (!Number.isFinite(rate) || rate <= 0) throw new Error('invalid fee rate');
   if (rate > maxFeeRate) throw new Error(`fee rate ${rate} sat/vB is above maxFeeRate (${maxFeeRate})`);
-  const feeFor = (inputs: number) => BigInt(Math.ceil(estimateVsize(inputs, [toScript, owner.script]) * Math.max(rate, 1)));
+  const feeFor = (inputs: number) => BigInt(Math.ceil(estimateVsize(inputs, [toScript, changeKey.script]) * Math.max(rate, 1)));
 
-  // Spendable coins: confirmed, not excluded, coinbase outputs only once mature. Largest first.
+  // Spendable coins of every source address: confirmed, not excluded, coinbase
+  // outputs only once mature. Largest first.
   const tip = await chain.tipHeight();
-  const usable = [];
-  for (const u of await chain.utxos(owner.address)) {
-    if (u.height === null || u.height === undefined) continue;
-    const confirmations = tip - u.height + 1;
-    if (confirmations < minConfirmations || exclude.has(`${u.txid}:${u.vout}`)) continue;
-    if (confirmations < COINBASE_MATURITY && (u.coinbase ?? (await chain.isCoinbase(u.txid, u.height)))) continue;
-    usable.push(u);
+  const usable: (ChainUtxo & { key: DerivedKey })[] = [];
+  for (const key of sources) {
+    for (const u of await chain.utxos(key.address)) {
+      if (u.height === null || u.height === undefined) continue;
+      const confirmations = tip - u.height + 1;
+      if (confirmations < minConfirmations || exclude.has(`${u.txid}:${u.vout}`)) continue;
+      if (confirmations < COINBASE_MATURITY && (u.coinbase ?? (await chain.isCoinbase(u.txid, u.height)))) continue;
+      usable.push({ ...u, key });
+    }
   }
   usable.sort((a, b) => (b.value > a.value ? 1 : b.value < a.value ? -1 : 0));
 
-  const chosen = [];
+  const chosen: typeof usable = [];
   let total = 0n;
   let fee = 0n;
   for (const u of usable) {
@@ -92,10 +103,13 @@ export async function buildPayment(to: string, amountSats: bigint | number, opti
 
   const net = bitcoinNetwork(network);
   const tx = new btc.Transaction();
-  for (const u of chosen) tx.addInput({ txid: u.txid, index: u.vout, witnessUtxo: { script: fromHex(owner.script), amount: u.value } });
+  for (const u of chosen) tx.addInput({ txid: u.txid, index: u.vout, witnessUtxo: { script: fromHex(u.key.script), amount: u.value } });
   tx.addOutputAddress(to, amount, net);
-  if (change > 0n) tx.addOutputAddress(owner.address, change, net);
-  tx.sign(owner.privateKey);
+  if (change > 0n) tx.addOutputAddress(changeKey.address, change, net);
+  // Each input with the key of the address it pays.
+  chosen.forEach((u, i) => {
+    if (!tx.signIdx(u.key.privateKey, i)) throw new Error('internal error: an input was not signed');
+  });
   tx.finalize();
   if (tx.fee !== fee) throw new Error('internal error: fee mismatch');
   return { txid: tx.id, hex: tx.hex, feeSats: fee, vsize: tx.vsize, amountSats: amount, to, inputs: chosen.map((u) => `${u.txid}:${u.vout}`) };

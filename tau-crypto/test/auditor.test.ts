@@ -1,11 +1,11 @@
 // The share auditor (src/payouts/auditor.ts): what it forwards, rewrites, refuses and records.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createShareAuditor } from '../src/payouts/auditor.ts';
+import { createShareAuditor, type ShareAuditorOptions } from '../src/payouts/auditor.ts';
 import type { BridgeConnection } from '../src/bridge/core.ts';
 import { coinbaseOutputs, rebuildBlockHeader } from '../src/payouts/index.ts';
 import type { ShareRecord, ShareResult } from '../src/payouts/index.ts';
-import { createWallet, walletFromMnemonic } from '../src/wallet/index.ts';
+import { addressScript, createWallet, newAddress, walletFromMnemonic } from '../src/wallet/index.ts';
 
 // Bitcoin block 1 as a stratum job (its coinbase's zero prevout holds xn1 + xn2).
 const B1_COINBASE =
@@ -30,7 +30,7 @@ function notify(jobId: string, job: typeof B1 = B1, clean = true) {
 }
 
 /** One audited connection, already subscribed (xn1 00000000, xn2 size 4). */
-async function connection(options: { maxSharesPer10s?: number; subscribe?: boolean } = {}) {
+async function connection(options: { maxSharesPer10s?: number; subscribe?: boolean; poolUser?: ShareAuditorOptions['poolUser'] } = {}) {
   const records: (ShareRecord | ShareResult)[] = [];
   const replies: any[] = [];
   const conn: BridgeConnection = {
@@ -44,7 +44,7 @@ async function connection(options: { maxSharesPer10s?: number; subscribe?: boole
     close() {},
   };
   const audit = createShareAuditor({
-    poolUser: OWNER,
+    poolUser: options.poolUser ?? OWNER,
     onShare: async (r) => {
       await new Promise((resolve) => setTimeout(resolve, 1)); // an async store
       records.push(r);
@@ -205,4 +205,60 @@ test("counts the satoshis a job's coinbase pays the owner", async () => {
   pool(notify('j', { ...B1, coinb1, coinb2 }));
   await client({ id: 3, method: 'mining.submit', params: [visitor, 'j', '00000000', '4966bc61', '00000000'] });
   assert.equal(records[0].ownerSats, '100000000');
+});
+
+const ABANDON_WORDS = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+const SLOT7 = newAddress({ mnemonic: ABANDON_WORDS }, { index: 7 }).address;
+
+test('a poolUser function logs each connection in as its own address, recorded with the share', async () => {
+  const calls: string[] = [];
+  const { client, pool, records } = await connection({
+    poolUser: ({ visitor: v, connection: c }) => {
+      calls.push(`${v}@${c.id}`);
+      return { address: SLOT7, index: 7 };
+    },
+  });
+  assert.deepEqual((await client({ id: 2, method: 'mining.authorize', params: [visitor, 'x'] })).params, [SLOT7, 'x']);
+  // Asked once per connection: authorizing again keeps the same login.
+  assert.deepEqual((await client({ id: 3, method: 'mining.authorize', params: [visitor, 'x'] })).params, [SLOT7, 'x']);
+  assert.deepEqual(calls, [`${visitor}@7`]);
+  pool(notify('b1'));
+  const sent = await client({ id: 4, method: 'mining.submit', params: [visitor, 'b1', '00000000', '4966bc61', '9962e301'] });
+  assert.equal(sent.params[0], SLOT7);
+  assert.deepEqual([records[0].visitor, records[0].poolUser, records[0].ownerIndex], [visitor, SLOT7, 7]);
+});
+
+test("ownerSats counts what the coinbase pays the connection's own login", async () => {
+  const slotScript = addressScript(SLOT7);
+  const coinb1 = '02000000' + '01' + '00'.repeat(32) + 'ffffffff' + '0c' + '03a08601';
+  const coinb2 = 'ffffffff' + '01' + '00e1f50500000000' + '16' + slotScript + '00000000';
+  const { client, pool, records } = await connection({ poolUser: () => ({ address: SLOT7, index: 7 }) });
+  await client({ id: 2, method: 'mining.authorize', params: [visitor, 'x'] });
+  pool(notify('j', { ...B1, coinb1, coinb2 }));
+  await client({ id: 3, method: 'mining.submit', params: [visitor, 'j', '00000000', '4966bc61', '00000000'] });
+  assert.equal(records[0].ownerSats, '100000000');
+});
+
+test('a fixed login records no index; a failing or invalid login refuses the authorize', async () => {
+  const fixed = await connection();
+  await fixed.client({ id: 2, method: 'mining.authorize', params: [visitor, 'x'] });
+  fixed.pool(notify('b1'));
+  await fixed.client({ id: 3, method: 'mining.submit', params: [visitor, 'b1', '00000000', '4966bc61', '9962e301'] });
+  assert.equal(fixed.records[0].poolUser, OWNER);
+  assert.ok(!('ownerIndex' in fixed.records[0]));
+
+  for (const poolUser of [
+    () => {
+      throw new Error('no key');
+    },
+    () => ({ address: 'not an address' }),
+    () => ({ address: SLOT7, index: -1 }),
+    async () => Promise.reject(new Error('store down')),
+  ]) {
+    const c = await connection({ poolUser });
+    assert.equal(await c.client({ id: 2, method: 'mining.authorize', params: [visitor, 'x'] }), null);
+    assert.deepEqual(c.replies.at(-1).error, [20, 'mining is unavailable right now', null]);
+    assert.equal(await c.client({ id: 3, method: 'mining.submit', params: [visitor, 'b1', '00000000', '4966bc61', '9962e301'] }), null);
+    assert.equal(c.replies.at(-1).error[1], 'unauthorized worker');
+  }
 });

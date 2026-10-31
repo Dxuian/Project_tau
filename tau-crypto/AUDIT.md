@@ -211,7 +211,7 @@ Dynamic check:
 
 The wallet code (`src/wallet/`; at the time of this review it was the top-level `btc.js`) imports
 `generateMnemonic`, `mnemonicToSeedSync` and `validateMnemonic` with the english wordlist,
-`HDKey`, `@scure/btc-signer` (index) and `sha256`.
+`HDKey` (and the `HARDENED_OFFSET` constant), `@scure/btc-signer` (index) and `sha256`.
 
 **@scure/bip39 (`index.js`)**
 - `generateMnemonic` (71-76): requires `strength % 32 === 0` and ≤ 256, then
@@ -237,6 +237,27 @@ The wallet code (`src/wallet/`; at the time of this review it was the top-level 
   - child key is `(IL + k) mod n`;
   - it retries with i+1 when IL ≥ n or the key is 0 (274-283), as BIP32 specifies.
 - The fingerprint is `hash160(pubkey)` (41, 74).
+- Added later, for watch-only addresses (`accountXpub`, `newAddress({ xpub })`):
+  - `fromExtendedKey` (120-146):
+    - it base58check-decodes the key (`@scure/base` checks the 4-byte double-SHA256
+      checksum) and requires exactly 78 bytes;
+    - it splits out the version, depth, parent fingerprint, index, chain code and key;
+    - the version must equal the expected private or public version for that kind of key,
+      and it throws `Version mismatch` otherwise.
+  - The project passes the version pair for the prefix it accepts (`xpub`/`zpub` on mainnet,
+    `tpub`/`vpub` otherwise) and refuses anything but a public key at depth 3.
+  - The constructor puts a public key through `Point.fromBytes`, an on-curve check (191-192).
+  - `publicExtendedKey` (102-107) with `serialize` (330-336) encodes
+    `version || depth || fingerprint || index || chain code || compressed key` in base58check.
+  - Public-only child derivation in `_deriveChild` (283-290):
+    - the child key is `K + IL·G`;
+    - it retries with i+1 when IL ≥ n or the result is the point at infinity;
+    - it refuses hardened children without the private key (238-243).
+  - Checked by `test/wallet.test.ts`:
+    - BIP84's published account `zpub` for the "abandon … about" words derives that BIP's
+      first two receive addresses without the words;
+    - `accountXpub` round-trips with the addresses derived from the words, up to
+      index 2^31−1.
 
 **@scure/btc-signer**
 - **Payments and addresses (`payment.js`):**
@@ -257,6 +278,11 @@ The wallet code (`src/wallet/`; at the time of this review it was the top-level 
   - `addInput` (1228) takes `witnessUtxo`; `addOutputAddress` (1358-1365) is
     `OutScript.encode(Address(net).decode(addr))`.
   - `sign` (1697-1712) signs every input it can and throws if none.
+  - For payments from several receive addresses, the project now calls `signIdx` directly for
+    each input, with the key of the address that coin belongs to. It throws if one isn't
+    signed, and still checks the fee after `finalize`.
+    - `test/payment.test.ts` checks that each witness carries its own address's public key.
+    - In the regtest tests, bitcoind accepts and mines such payouts.
   - In `signIdx` (1505-1689), for P2WPKH the scriptCode is `OP_DUP OP_HASH160 <h160>
     OP_EQUALVERIFY OP_CHECKSIG` (1677-1678). The default sighash is ALL (677). It calls
     `preimageWitnessV0` with the `witnessUtxo` amount, then `signECDSA` (1679-1686).

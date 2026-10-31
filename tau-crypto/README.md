@@ -176,22 +176,40 @@ application built on them, with a Node server and a Cloudflare Worker.
 **`tau-crypto/wallet`**
 - `createWallet()`: BIP39 words and a BIP84 `bc1q…` address, offline.
 - `newAddress(wallet, { index? })`: the wallet's next receive address,
-  `m/84'/0'/0'/0/<index>`, returned as the wallet at that address.
+  `m/84'/0'/0'/0/<index>`, returned as the wallet at that address. A wallet given as
+  `{ xpub }` gets its addresses without the words (watch-only).
+- `accountXpub(mnemonic)`: the account public key (`xpub`/`tpub`). It derives every
+  receive address and can't spend. `zpub`/`vpub` from other wallets work too.
 - `walletFromMnemonic`, `isValidAddress`, `addressScript`.
-- `payout(to, sats, { mnemonic, chain })` / `buildPayment`. These spend from the first
-  address, with largest-first coin selection, an upper-bound fee, change and signing.
+- `payout(to, sats, { mnemonic, chain, from?, changeIndex? })` / `buildPayment`:
+  - they spend the coins of the receive indexes in `from` (default `[0]`), largest first,
+    signing each input with its own key;
+  - change goes to `changeIndex` (default the first of `from`), and the fee is an upper
+    bound.
 - Chain clients `esplora(url)` (mempool.space) and `bitcoinCore({ url, user, pass })`.
 
 **`tau-crypto/payouts`**
-- `createPayoutService({ ownerAddress, ownerMnemonic?, sharePercent, network?, shares, ledger, chain?, … })`
-  returns `{ intercept, verifyPayout(address), payoutAll(), canPay }`.
-  - It wires the share auditor and the payout engine to one owner. Visitors are logged
-    in to the pool as `ownerAddress`, and the words must belong to that address (its
-    first one).
-  - Without the words, it records shares but can't pay.
+- `createPayoutService({ ownerAddress, ownerMnemonic?, ownerXpub?, addressPeriod?, sharePercent, network?, shares, ledger, chain?, … })`
+  returns `{ intercept, addressFor(time?), verifyPayout(address), payoutAll(), canPay }`.
+  - It wires the share auditor and the payout engine to one owner wallet. The words and
+    the xpub must both give `ownerAddress` as their first address.
+  - **One address, or a fresh one per period.**
+    - Without `addressPeriod`, every visitor is logged in to the pool as `ownerAddress`.
+    - With `addressPeriod: { periodMs, epochMs }`, visitors mine to a fresh owner address
+      each period: slot N (`addressSlot`, `1 + periods since the epoch`) is receive index
+      N, so any period's address can be derived again from its time alone.
+    - A connection may keep the slot its page showed (`?slot=N` on the bridge URL), but
+      only the current or the previous one.
+  - `addressFor(time)` returns `{ address, index, from, until }`.
+  - **Payouts:** a block is checked against, and paid from, its own slot's address, and
+    the change goes to `ownerAddress` (`changeIndex`, default 0).
+  - Without the words (only `ownerXpub`), it records shares but can't pay.
 - The parts, for your own wiring:
   - `createShareAuditor({ poolUser, onShare })`, the interceptor that logs every
-    connection in as `poolUser` and records each share before forwarding it;
+    connection in as `poolUser` and records each share before forwarding it. `poolUser`
+    can be one address, or a function that gives each connection its own login (its
+    records then carry `poolUser` and `ownerIndex`);
+  - `addressSlot(time, { periodMs, epochMs })` and `slotTimes(slot, …)`;
   - `verifyPayout(address, { shares, ledger, chain, ownerMnemonic, sharePercent })`,
     which pays a visitor `sharePercent` of each block they provably found, once, and
     `payoutAll`;
@@ -249,7 +267,7 @@ Upstream bugs found and fixed in the process (all in `native/patches/patches.mjs
 Separately, upstream's own ARM builds produce wrong sha256t and scryptn2 hashes
 (confirmed against independent references); this port follows the x86 paths.
 
-Test suite: 480 Node tests (278 of them golden: 92 cases × 3 variants + reference checks)
+Test suite: 498 Node tests (278 of them golden: 92 cases × 3 variants + reference checks)
 and 18 headless-Chromium tests, including mining Bitcoin block 1 from a browser page
 through the bridge to a mock pool, and the WebGPU kernel on SwiftShader.
 

@@ -1,7 +1,11 @@
 // payout() / buildPayment(): coin selection, fees, change and refusals, against a mock chain.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addressScript, createWallet, payout, walletFromMnemonic } from '../src/wallet/index.ts';
+import * as btc from '@scure/btc-signer';
+import { HDKey } from '@scure/bip32';
+import { mnemonicToSeedSync } from '@scure/bip39';
+import { addressScript, createWallet, newAddress, payout, walletFromMnemonic } from '../src/wallet/index.ts';
+import type { ChainUtxo } from '../src/wallet/index.ts';
 import { mockChain, outputsOf, type MockChain } from './mock-chain.ts';
 
 const OWNER_WORDS = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -73,4 +77,45 @@ test('refuses unsafe or invalid payments', async () => {
   await assert.rejects(payout(visitor, 1_000_000n, { chain, mnemonic: '' }), /invalid mnemonic/);
   await assert.rejects(payout(visitor, 200_000_000n, opts(chain)), /not enough confirmed funds/);
   assert.equal(chain.broadcasts.length, 0);
+});
+
+/** A chain whose coins belong to particular addresses. */
+function chainOf(byAddress: Record<string, ChainUtxo[]>): MockChain {
+  const chain = mockChain();
+  chain.utxos = async (address: string) => byAddress[address] ?? [];
+  return chain;
+}
+const at = (index: number) => newAddress({ mnemonic: OWNER_WORDS }, { index }).address;
+const publicKeyAt = (index: number) =>
+  Buffer.from(HDKey.fromMasterSeed(mnemonicToSeedSync(OWNER_WORDS)).derive(`m/84'/0'/0'/0/${index}`).publicKey!).toString('hex');
+
+test('spends from the chosen receive indexes, signing each input with its own key; change to changeIndex', async () => {
+  const chain = chainOf({
+    [at(5)]: [{ txid: txid(5), vout: 0, value: 30_000n, height: 1000, coinbase: false }],
+    [at(9)]: [{ txid: txid(9), vout: 1, value: 40_000n, height: 1000, coinbase: false }],
+    [OWNER]: [{ txid: txid(1), vout: 0, value: 100_000_000n, height: 1000, coinbase: false }], // not a source here
+  });
+  const r = await payout(visitor, 60_000n, opts(chain, { from: [5, 9], changeIndex: 0 }));
+  assert.deepEqual(r.inputs, [`${txid(9)}:1`, `${txid(5)}:0`], 'largest first, only from the sources');
+  const { outputs } = outputsOf(chain.broadcasts[0]);
+  assert.deepEqual(outputs, [
+    { script: addressScript(visitor), amount: 60_000n },
+    { script: addressScript(OWNER), amount: 70_000n - 60_000n - r.feeSats },
+  ]);
+  // Each witness carries the public key of the address its coin belongs to.
+  const tx = btc.Transaction.fromRaw(Buffer.from(chain.broadcasts[0], 'hex'));
+  const witnessKey = (i: number) => Buffer.from(tx.getInput(i).finalScriptWitness![1]).toString('hex');
+  assert.deepEqual([witnessKey(0), witnessKey(1)], [publicKeyAt(9), publicKeyAt(5)]);
+});
+
+test('change goes back to the first source by default; refuses paying any of its own addresses', async () => {
+  const chain = chainOf({ [at(3)]: [{ txid: txid(3), vout: 0, value: 1_000_000n, height: 1000, coinbase: false }] });
+  await payout(visitor, 100_000n, opts(chain, { from: [3] }));
+  assert.equal(outputsOf(chain.broadcasts[0]).outputs[1].script, addressScript(at(3)));
+  await assert.rejects(payout(at(3), 100_000n, opts(chain, { from: [3] })), /the wallet itself/);
+  await assert.rejects(payout(OWNER, 100_000n, opts(chain, { from: [3], changeIndex: 0 })), /the wallet itself/);
+  await assert.rejects(payout(visitor, 100_000n, opts(chain, { from: [] })), /at least one receive index/);
+  await assert.rejects(payout(visitor, 100_000n, opts(chain, { from: [-1] })), /index must be a whole number/);
+  // Index 0 has nothing on this chain.
+  await assert.rejects(payout(visitor, 100_000n, opts(chain)), /not enough confirmed funds/);
 });

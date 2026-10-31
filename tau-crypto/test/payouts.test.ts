@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createShareAuditor } from '../src/payouts/auditor.ts';
 import { memoryStores, payoutAll, rebuildBlockHeader, verifyPayout, type PayoutOptions, type ShareRecord } from '../src/payouts/index.ts';
-import { addressScript, createWallet, walletFromMnemonic } from '../src/wallet/index.ts';
+import { addressScript, createWallet, newAddress, walletFromMnemonic } from '../src/wallet/index.ts';
 import { mockChain, outputsOf, type MockChain } from './mock-chain.ts';
 
 const OWNER_WORDS = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -244,4 +244,90 @@ test('payoutAll settles every visitor with a block', async () => {
   // Two payouts, two different coins.
   const inputs = [...stores.ledger.entries.values()].flatMap((e) => e.inputs);
   assert.equal(new Set(inputs).size, 2);
+});
+
+/** Like findBlock, through a connection logged in as the owner's receive address `index` (a slot). */
+async function findBlockAt(stores: Stores, visitor: string, index: number, seed = 50) {
+  const login = newAddress({ mnemonic: OWNER_WORDS }, { index }).address;
+  const job = {
+    prevhash: seed.toString(16).padStart(64, '0'),
+    coinb1: '02000000' + '01' + '00'.repeat(32) + 'ffffffff' + '0c' + '03' + seed.toString(16).padStart(6, '0'),
+    coinb2: 'ffffffff' + '01' + le64(REWARD) + '16' + addressScript(login) + '00000000',
+    merkle: [] as string[],
+    version: '20000000',
+    nbits: '207fffff',
+    ntime: '66000000',
+  };
+  const audit = createShareAuditor({ poolUser: () => ({ address: login, index }), onShare: (r) => stores.shares.add(r) })({
+    id: seed,
+    peer: 'p',
+    target: 'pool:3333',
+    tls: false,
+    origin: null,
+    query: new URLSearchParams(),
+    reply() {},
+    close() {},
+  });
+  await audit.fromClient!(JSON.stringify({ id: 1, method: 'mining.subscribe', params: [] }));
+  audit.fromPool!(JSON.stringify({ id: 1, result: [[], 'abcd0123', 4], error: null }));
+  await audit.fromClient!(JSON.stringify({ id: 2, method: 'mining.authorize', params: [visitor, 'x'] }));
+  audit.fromPool!(JSON.stringify({ id: null, method: 'mining.notify', params: ['j', job.prevhash, job.coinb1, job.coinb2, [], job.version, job.nbits, job.ntime, true] }));
+  let nonce = 0;
+  let rebuilt;
+  do {
+    rebuilt = rebuildBlockHeader({ ...job, xn1: 'abcd0123', xn2: '00000000', nonce: (++nonce).toString(16).padStart(8, '0') });
+  } while (!rebuilt.isBlock);
+  await audit.fromClient!(JSON.stringify({ id: 3, method: 'mining.submit', params: [visitor, 'j', '00000000', job.ntime, nonce.toString(16).padStart(8, '0')] }));
+  return { blockHash: rebuilt.blockHash, coinbaseTxid: rebuilt.coinbaseTxid, login, record: stores.shares.records.at(-1) as ShareRecord };
+}
+
+/** A chain on which `found` pays REWARD to `found.login`, whose only coin it is. */
+function chainAt(found: { blockHash: string; coinbaseTxid: string; login: string }): MockChain {
+  const chain = mockChain({
+    tip: 1099,
+    blocks: { [found.blockHash]: { inBestChain: true, height: 1000 } },
+    coinbases: { [found.blockHash]: { txid: found.coinbaseTxid, outputs: [{ script: addressScript(found.login), value: REWARD }] } },
+  });
+  const coin = { txid: found.coinbaseTxid, vout: 0, value: REWARD, height: 1000, coinbase: true };
+  chain.utxos = async (address: string) => (address === found.login ? [coin] : []);
+  return chain;
+}
+
+test("a slot's block is verified against, and paid from, its own owner address; change to the first address", async () => {
+  const { stores, visitor, opts } = setup();
+  const found = await findBlockAt(stores, visitor, 7286);
+  assert.deepEqual([found.record.poolUser, found.record.ownerIndex], [found.login, 7286]);
+  const chain = chainAt(found);
+  const [r] = await verifyPayout(visitor, opts(chain));
+  assert.equal(r.status, 'paid', r.error);
+  assert.equal(r.ownerAddress, found.login);
+  assert.equal(r.payoutSats, REWARD / 10n);
+  const { outputs, inputs } = outputsOf(chain.broadcasts[0]);
+  assert.equal(inputs, 1);
+  assert.deepEqual(outputs[0], { script: addressScript(visitor), amount: REWARD / 10n });
+  assert.equal(outputs[1].script, OWNER_SCRIPT, "the owner's 90% goes to its first address");
+  assert.equal((await verifyPayout(visitor, opts(chain)))[0].status, 'already-paid');
+  // changeIndex is a parameter.
+  const other = setup();
+  const again = await findBlockAt(other.stores, other.visitor, 7300, 51);
+  const chain2 = chainAt(again);
+  const [r2] = await verifyPayout(other.visitor, other.opts(chain2, { changeIndex: 3 }));
+  assert.equal(r2.status, 'paid', r2.error);
+  assert.equal(outputsOf(chain2.broadcasts[0]).outputs[1].script, addressScript(newAddress({ mnemonic: OWNER_WORDS }, { index: 3 }).address));
+});
+
+test("not paid when the record's login isn't the owner's address at its index, or the coinbase pays another address", async () => {
+  const { stores, visitor, opts } = setup();
+  const found = await findBlockAt(stores, visitor, 12);
+  const chain = chainAt(found);
+  stores.shares.records.at(-1)!.poolUser = createWallet().address; // a tampered record
+  const [r] = await verifyPayout(visitor, opts(chain));
+  assert.equal(r.status, 'not-ours');
+  assert.match(r.error!, /pool login/);
+  // The record says index 12, but the block on the chain pays index 13.
+  const b = setup();
+  const found13 = await findBlockAt(b.stores, b.visitor, 12, 52);
+  const elsewhere = chainAt({ ...found13, login: newAddress({ mnemonic: OWNER_WORDS }, { index: 13 }).address });
+  assert.equal((await verifyPayout(b.visitor, b.opts(elsewhere)))[0].status, 'not-ours');
+  assert.equal(chain.broadcasts.length + elsewhere.broadcasts.length, 0);
 });

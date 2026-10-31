@@ -1,14 +1,15 @@
 import {
   buildPayment,
   payout
-} from "./chunks/chunk-E3XZQTDT.js";
+} from "./chunks/chunk-6AQT565A.js";
 import {
+  accountXpub,
   addressScript,
   createWallet,
   isValidAddress,
   newAddress,
   walletFromMnemonic
-} from "./chunks/chunk-APBMG6TN.js";
+} from "./chunks/chunk-PS4DJKB4.js";
 
 // src/wallet/chain.ts
 var HASH_RE = /^[0-9a-f]{64}$/;
@@ -132,6 +133,7 @@ function bitcoinCore({ url, user, pass, fallbackFeeRate = 2, fetch: doFetch = gl
   };
 }
 export {
+  accountXpub,
   addressScript,
   bitcoinCore,
   buildPayment,
