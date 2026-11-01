@@ -1,6 +1,6 @@
 // The one screen. The server reads the deployment's settings and this hour's
 // mining address (from the payout service); everything else happens in the browser.
-import { analyticsConfig, siteConfig } from '../lib/config.js';
+import { siteConfig } from '../lib/config.js';
 import { miningAddress } from '../lib/payout-api.js';
 import { TrackOnce } from './analytics.js';
 import Dashboard from './dashboard.js';
@@ -23,7 +23,6 @@ export default async function Home() {
         pool={config.pool}
         minerUrl={config.minerUrl}
         initialMining={mining}
-        analytics={Boolean(analyticsConfig())}
       />
       {!mining && <TrackOnce event="mining_unavailable" />}
     </>

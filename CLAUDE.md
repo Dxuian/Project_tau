@@ -57,7 +57,8 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
       - `worker.js` holds the only Cloudflare-specific code: `connect` from `cloudflare:sockets`, `WebSocketPair`, `cf-connecting-ip`;
       - `d1-stores.js` with its own `schema.js` and `migrations/`;
       - `wrangler.toml`, with a cron every 15 minutes for payouts, the share purge and the health event. It has `global_fetch_strictly_public` too, so the health check can fetch the site.
-  - `site/`: the website, Next.js 16 App Router, plain JS: **one screen** (`app/page.js` renders `app/dashboard.js`), dark by default. `/wallet` and `/mine/:address` redirect to it (`next.config.mjs`).
+  - `site/`: the website, Next.js 16 App Router, plain JS: **one screen** (`app/page.js` renders `app/dashboard.js`). `/wallet` and `/mine/:address` redirect to it (`next.config.mjs`).
+    - **The wallet setup comes first** (`components/wallet-setup.js`): until the device has a payout address, there is no mine button at all. It offers three ways: create a wallet (`components/recovery-phrase.js`, with a "saved it" confirmation), upload a file (`readWalletFile` in `lib/backup.js`) or paste an address. The miner's "Change" returns to it.
     - **UI:** shadcn/ui components in plain JS (`components/ui/`, `components.json`, `cn` in `lib/utils.js`, `@/` imports through `jsconfig.json`) on Tailwind CSS v4 (`postcss.config.mjs`, `app/globals.css`), with GSAP for the motion. No daisyUI, which fights shadcn's theme.
     - **Themes:** `lib/themes.js` lists them (Arcade is the default, on `<html data-theme>`), `app/themes.css` styles them, and `components/theme-picker.js` switches them.
       - Each theme sets `--t-*` tokens, which `[data-theme]` maps onto shadcn's. Each has its own `.mine-btn` look.
@@ -65,7 +66,7 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
       - `THEME_SCRIPT`, a constant inline script in `<head>`, applies the saved theme before paint.
     - **The graph** (`components/hashrate-chart.js`) is a canvas redrawn only when the miner reports (every 2 s), not a chart library. Switched off, it isn't mounted at all. Keep it that cheap: it shares the CPU with mining.
     - **The state** lives in `lib/hooks.js`: `useMiner` (consent-first: the miner loads only on Start), `usePayouts`, `useHour`, `useSavedAddress`. The analytics events and their names stay as they are, because the PostHog alerts count them.
-    - **Words and addresses** render with `translate="no"` and the `notranslate` class. Fields that hold either have spellcheck, autocomplete and autocorrect off. The words live only in `components/wallet-dialog.js`'s state, and never in a URL.
+    - **Words and addresses** render with `translate="no"` and the `notranslate` class. Fields that hold either have spellcheck, autocomplete and autocorrect off. The words live only in the setup's state while it shows them, and never in a URL. Upload errors show our own fixed messages, never the file's content.
     - Client components (`'use client'`) import `tau-crypto/wallet`.
     - The library is copied in, not linked: `scripts/copy-library.mjs` copies `tau-crypto/dist` (on every build) to `lib/tau-crypto/` (imported as `tau-crypto/*` through `jsconfig.json`) and `public/tau-crypto/` (the miner, which the mine page loads at run time, so it is never bundled). The app needs nothing outside its folder, which OpenNext requires.
     - Server code reads `PAYOUT_API_URL`, `BRIDGE_URL`, `POOL_URL`, `NETWORK`, `POSTHOG_KEY` and `POSTHOG_HOST` at request time (the root layout is `force-dynamic` for this). `wrangler.jsonc` and `open-next.config.ts` are the Cloudflare (OpenNext) target; Vercel needs nothing extra.

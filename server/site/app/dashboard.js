@@ -1,8 +1,9 @@
 'use client';
-// Project Tau on one screen. Left: the rig (the mine button, the hashrate, the
-// stats, the speed) and the live graph. Right: the details (the payout address,
-// this hour's mining address, the visitor's blocks). Nothing loads or mines until
-// the visitor presses the mine button.
+// Project Tau on one screen. First, until the visitor has a payout address: the
+// wallet setup (components/wallet-setup.js). Then the miner. Left: the rig (the
+// mine button, the hashrate, the stats, the speed) and the live graph. Right: the
+// details (the payout address, this hour's mining address, the visitor's blocks).
+// Nothing loads or mines until the visitor presses the mine button.
 import { gsap } from 'gsap';
 import { ActivityIcon, CpuIcon, GaugeIcon, GlobeIcon, ShieldCheckIcon, TimerIcon, ZapIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -12,6 +13,7 @@ import { celebrate } from '@/components/celebrate';
 import HashrateChart from '@/components/hashrate-chart';
 import PayoutCard from '@/components/payout-card';
 import ThemePicker from '@/components/theme-picker';
+import WalletSetup from '@/components/wallet-setup';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
@@ -32,13 +34,15 @@ const STATES = {
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const reveal = (i) => ({ style: { '--i': i } });
 
-export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialMining, analytics }) {
+export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialMining }) {
   const saved = useSavedAddress(network);
   const mining = useHour(initialMining);
   const miner = useMiner({ address: saved.address, network, bridgeUrl, pool, minerUrl });
   const blocks = usePayouts(saved.address);
   const [live, setLive] = usePreference('tau.graph', true);
+  const [changing, setChanging] = useState(false);
   const rig = useRef(null);
+  const view = !saved.ready ? 'loading' : !saved.address || changing ? 'setup' : 'miner';
 
   // A small jolt when mining starts.
   useEffect(() => {
@@ -56,11 +60,11 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
   }, [count]);
 
   const blocker = !saved.address ? 'Add a payout address first.' : !mining ? 'Mining is unavailable right now.' : null;
-  const [stateLabel, dot] = mining ? STATES[miner.state] ?? STATES.idle : ['Unavailable', 'bg-destructive'];
+  const [stateLabel, dot] = view !== 'miner' ? ['Setup', 'bg-primary'] : mining ? STATES[miner.state] ?? STATES.idle : ['Unavailable', 'bg-destructive'];
   const toggle = () => (miner.running ? miner.stop() : miner.start(mining?.index));
 
   return (
-    <div className="relative isolate min-h-dvh lg:h-dvh lg:overflow-hidden">
+    <div className={cn('relative isolate min-h-dvh', view === 'miner' && 'lg:h-dvh lg:overflow-hidden')}>
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="theme-pattern absolute inset-0" />
         <div className="backdrop-grid absolute inset-0" />
@@ -68,7 +72,7 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
         <div className="glow glow-b top-1/3 -right-48 size-[36rem]" />
       </div>
 
-      <div className="mx-auto flex h-full max-w-[1480px] flex-col gap-4 p-4 sm:p-5 lg:p-6">
+      <div className={cn('mx-auto flex h-full max-w-[1480px] flex-col gap-4 p-4 sm:p-5 lg:p-6', view !== 'miner' && 'min-h-dvh')}>
         <header {...reveal(0)} className="reveal flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary font-display text-xl font-black text-primary-foreground shadow-[0_0_32px_-6px] shadow-primary/70">
@@ -92,6 +96,20 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
           </div>
         </header>
 
+        {view === 'loading' && <div aria-hidden className="mx-auto mt-10 h-64 w-full max-w-5xl animate-pulse rounded-2xl border bg-card" />}
+        {view === 'setup' && (
+          <div className="flex flex-1 items-start justify-center py-4 sm:py-8 lg:items-center lg:pb-24">
+            <WalletSetup
+              network={network}
+              onDone={(address, source) => {
+                saved.choose(address, source);
+                setChanging(false);
+              }}
+              onCancel={saved.address ? () => setChanging(false) : null}
+            />
+          </div>
+        )}
+        {view === 'miner' && (
         <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
           {/* Below lg, main and aside dissolve (display: contents) so the cards stack in the order a visitor uses them. */}
           <main className="contents lg:flex lg:min-h-0 lg:flex-col lg:gap-4">
@@ -213,9 +231,8 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
               className="reveal order-2 gap-3 py-4 lg:order-none"
               network={network}
               address={saved.address}
-              ready={saved.ready}
               locked={miner.running}
-              onChoose={saved.choose}
+              onChange={() => setChanging(true)}
             />
 
             <Card {...reveal(4)} className="reveal order-4 gap-3 py-4 lg:order-none">
@@ -258,13 +275,11 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
 
             <p {...reveal(6)} className="reveal order-6 flex gap-2 px-1 pb-2 text-xs leading-relaxed text-muted-foreground lg:order-none">
               <ShieldCheckIcon className="mt-0.5 size-3.5 shrink-0 text-success" />
-              <span>
-                Your 12 words never leave this device.
-                {analytics && ' We count visits and button presses with PostHog, never your words or your address.'}
-              </span>
+              <span>Your 12 words never leave this device. We don&apos;t monitor any sensitive data.</span>
             </p>
           </aside>
         </div>
+        )}
       </div>
     </div>
   );

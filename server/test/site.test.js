@@ -109,10 +109,11 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   const page = await context.newPage();
   page.on('pageerror', (e) => console.error('page error:', e.message));
 
-  // One screen, in Arcade by default. No address yet, so nothing to mine to: create a wallet in the browser.
+  // First the wallet setup (in Arcade, the default theme): no miner until it's done. Create a wallet in the browser.
   await page.goto(`${site}/`);
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'arcade');
-  assert.ok(await page.getByTestId('start').isDisabled(), 'no payout address yet');
+  await page.getByTestId('setup').waitFor();
+  assert.equal(await page.getByTestId('start').count(), 0, 'no mine button before a wallet');
   await page.getByTestId('create-wallet').click();
   const words = (await page.getByTestId('words').getByTestId('word').allInnerTexts()).map((w) => w.trim());
   assert.equal(words.length, 12);
@@ -151,6 +152,16 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   await restore.getByTestId('change-address').click();
   await restore.getByTestId('restore-file').setInputFiles(file);
   assert.equal((await restore.getByTestId('payout-address').innerText()).trim(), address, 'restored from the backup');
+  // The address file: downloaded here, and uploaded back; a .json with just an address works too.
+  const [addressDownload] = await Promise.all([restore.waitForEvent('download'), restore.getByTestId('download-address').click()]);
+  const addressFile = await addressDownload.path();
+  assert.deepEqual(JSON.parse(readFileSync(addressFile, 'utf8')), { address, network: 'regtest' }, 'the address, and no words');
+  await restore.getByTestId('change-address').click();
+  await restore.getByTestId('restore-file').setInputFiles({ name: 'other.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ address: other })) });
+  assert.equal((await restore.getByTestId('payout-address').innerText()).trim(), other);
+  await restore.getByTestId('change-address').click();
+  await restore.getByTestId('restore-file').setInputFiles(addressFile);
+  assert.equal((await restore.getByTestId('payout-address').innerText()).trim(), address, 'the downloaded address file brings it back');
   assert.ok(!(await restore.evaluate(() => JSON.stringify(localStorage))).includes(words[0] + ' ' + words[1]), 'no words stored');
   // Sent before the tab goes (events are sent in batches).
   await until(() => ph.events().some((e) => e.event === 'wallet_restored'), 20_000, 'the restore event');
