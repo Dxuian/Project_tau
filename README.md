@@ -49,24 +49,29 @@ Slot N (one an hour) is receive index N of our wallet: `1 + whole hours since TA
 
 ## The website (`server/site`)
 
-- **`/wallet`** offers three ways to get a payout address:
-  - **enter an address** you already have;
-  - **create a wallet** on the spot. It's made in the browser, and its 12 words never reach us. You can then:
-    - **Download** a `.txt` backup;
-    - **Copy** the words;
-    - **Share** them: the phone's share sheet (WhatsApp, Telegram, SMS), or a text box on a laptop. A warning comes first: anyone who has the words can spend, and sending them by message stores them on that service;
-  - **restore** from that backup file.
+**One screen**, dark by default (a toggle switches to light). Built with shadcn/ui on Tailwind CSS v4, with GSAP for the motion.
+- **Left, the miner:**
+  - your hashrate (big, animated), shares, uptime, threads and the block being mined;
+  - a **live graph** of the last 3 minutes. Switch it off and the CPU it used goes to mining;
+  - the controls: an explicit "I agree" before Start, a speed slider, Stop. Mining pauses when the tab is hidden.
+- **Right, the details:**
+  - **your payout address**. Paste one you have, **create a wallet** on the spot, or **restore** one from its backup file. The wallet is made in the browser, and its 12 words never reach us. They show in a dialog where you can:
+    - **download** a `.txt` backup;
+    - **copy** the words;
+    - **share** them: the phone's share sheet (WhatsApp, Telegram, SMS), or a text box on a laptop. A warning comes first: anyone who has the words can spend, and sending them by message stores them on that service.
 
-  The device remembers only the address.
-- **`/mine/[address]`** shows this hour's mining address, rendered on the server. Mining needs an explicit "I agree" before Start. It shows the hash rate and shares, and has a speed control. It pauses when the page is hidden.
-- **Your blocks** shows each block you found: waiting for 100 confirmations (with progress), or paid (with the transaction).
-- **The library is copied in at build time.** `tau-crypto/dist` goes to `lib/tau-crypto/` (what the pages import) and to `public/tau-crypto/` (the miner). The page loads the miner only when you press Start, so it is never bundled.
+    The device remembers only the address, never in a URL. The words and addresses are marked `translate="no"`, and the backup box has spellcheck off, so neither page translation nor a spellcheck service sees them.
+  - **this hour's mining address**, rendered on the server, with a countdown to the next one;
+  - **your blocks**: each block you found, waiting for 100 confirmations (with progress) or paid (with the transaction). Confetti when one appears;
+  - **your odds** at your current speed.
+- **Old links:** `/wallet` and `/mine/<address>` redirect to the one screen.
+- **The library is copied in at build time.** `tau-crypto/dist` goes to `lib/tau-crypto/` (what the page imports) and to `public/tau-crypto/` (the miner). The page loads the miner only when you press Start, so it is never bundled.
 - **Analytics (PostHog)**, when `POSTHOG_KEY` is set (`lib/analytics.js`). Only what the site sends itself:
-  - page views, with Bitcoin addresses cut out of every URL;
+  - page views (`/` only now; Bitcoin addresses are cut out of everything anyway);
   - uncaught errors, for PostHog's error tracking. The browser source maps are served next to the scripts (`next.config.mjs`), so stack traces resolve without an upload step;
-  - named events, none of which carry words or addresses: wallet created, backup downloaded, words copied or shared, wallet restored, payout address chosen, mining consent, start, stop, speed, errors and unavailable, payout checks, blocks seen.
+  - named events, none of which carry words or addresses: wallet created, backup downloaded, words copied or shared, wallet restored, payout address chosen, mining consent, start, stop, speed, errors and unavailable, payout checks, blocks seen, live graph switched.
 
-  Nothing reads the page: no autocapture, session replay, heatmaps or surveys, and no remote config or scripts from PostHog, because the wallet page shows the 12 words. Every event carries `app: "project-tau"`, since the PostHog project is shared with other apps: filter on it. The footer says analytics is on.
+  Nothing reads the page: no autocapture, session replay, heatmaps or surveys, and no remote config or scripts from PostHog, because the page shows a new wallet's 12 words. Every event carries `app: "project-tau"`. The page says analytics is on.
 
 ## Settings
 

@@ -1,8 +1,9 @@
 // The website (site/, Next.js) end to end on Node: `next build` + `next start`,
 // in headless Chromium, against the Node payout service and a regtest pool.
-// A visitor creates a wallet (download, share box, copy, restore from the
-// file), sees this hour's mining address rendered by the server, agrees, mines
-// a regtest block in the page, and once it's mature the page shows it paid.
+// On its one screen a visitor creates a wallet (download, share box, copy,
+// restore from the file), sees this hour's mining address rendered by the
+// server, agrees, mines a regtest block in the page, and once it's mature the
+// page shows it paid.
 // Meanwhile the page reports to a stand-in PostHog: the named events, tagged
 // with the app, and never the words or an address.
 import { after, before, test } from 'node:test';
@@ -108,14 +109,14 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   const page = await context.newPage();
   page.on('pageerror', (e) => console.error('page error:', e.message));
 
-  // Create a wallet in the browser.
-  await page.goto(`${site}/wallet`);
-  await page.getByRole('button', { name: 'Create a wallet' }).click();
-  await page.getByTestId('create').click();
-  const words = (await page.getByTestId('words').locator('li').allInnerTexts()).map((w) => w.trim());
+  // One screen. No address yet: create a wallet in the browser.
+  await page.goto(`${site}/`);
+  await page.getByTestId('create-wallet').click();
+  const words = (await page.getByTestId('words').getByTestId('word').allInnerTexts()).map((w) => w.trim());
   assert.equal(words.length, 12);
   const address = (await page.getByTestId('new-address').innerText()).trim();
   assert.match(address, /^bcrt1q/);
+  assert.equal(await page.getByTestId('words').getAttribute('translate'), 'no', 'page translators leave the words alone');
 
   // Download: the backup file holds the words and the address.
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download').click()]);
@@ -126,42 +127,53 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   // Share: a warning first, then (on a laptop) a text box with the backup.
   await page.getByTestId('share').click();
   await page.getByTestId('share-confirm').click();
-  assert.equal(await page.getByTestId('share-text').inputValue(), backup);
-  await page.getByRole('button', { name: 'Done' }).click();
+  const box = page.getByTestId('share-text');
+  assert.equal(await box.inputValue(), backup);
+  assert.deepEqual([await box.getAttribute('spellcheck'), await box.getAttribute('autocomplete')], ['false', 'off'], 'no spellcheck service sees the words');
+  await page.getByTestId('share-done').click();
   // Copy: the words, in order.
   await page.getByTestId('copy').click();
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), words.join(' '));
-  // Continue only once the visitor says the words are saved.
-  assert.ok(await page.getByTestId('continue').isDisabled());
+  // The wallet is used only once the visitor says the words are saved.
+  assert.ok(await page.getByTestId('use-wallet').isDisabled());
   await page.getByTestId('saved').check();
-  await page.getByTestId('continue').click();
-  await page.waitForURL(`${site}/mine/${address}`);
+  await page.getByTestId('use-wallet').click();
+  assert.equal((await page.getByTestId('payout-address').innerText()).trim(), address);
+  assert.ok(!(await page.evaluate(() => document.body.innerText)).includes(`${words[0]} ${words[1]}`), 'the words are gone from the page');
 
   step('wallet created and kept');
   // Restore from the downloaded file, in a fresh tab; the device remembers the address.
   const restore = await context.newPage();
-  await restore.goto(`${site}/wallet`);
-  await restore.locator('.panel').first().getByText(address).waitFor({ timeout: 10_000 }); // remembered on this device
-  await restore.getByRole('button', { name: 'Restore from backup file' }).click();
+  await restore.goto(`${site}/`);
+  await restore.getByTestId('payout-address').getByText(address).waitFor({ timeout: 10_000 }); // remembered on this device
+  await restore.getByTestId('change-address').click();
   await restore.getByTestId('restore-file').setInputFiles(file);
-  assert.equal((await restore.getByTestId('restored-address').innerText()).trim(), address);
+  assert.equal((await restore.getByTestId('payout-address').innerText()).trim(), address, 'restored from the backup');
   assert.ok(!(await restore.evaluate(() => JSON.stringify(localStorage))).includes(words[0] + ' ' + words[1]), 'no words stored');
   // Sent before the tab goes (events are sent in batches).
   await until(() => ph.events().some((e) => e.event === 'wallet_restored'), 20_000, 'the restore event');
   await restore.close();
 
-  // The mine page: this hour's address, rendered on the server.
+  // This hour's mining address, rendered on the server.
   const hour = await (await fetch(`${service}/address`)).json();
   assert.equal((await page.getByTestId('mining-address').innerText()).trim(), hour.address);
   await page.getByTestId('payouts').getByText('No blocks found yet.').waitFor();
+  // Old links lead to the one screen.
+  assert.equal(new URL((await fetch(`${site}/wallet`, { redirect: 'manual' })).headers.get('location'), site).pathname, '/');
+  assert.equal(new URL((await fetch(`${site}/mine/${address}`, { redirect: 'manual' })).headers.get('location'), site).pathname, '/');
 
-  step('mine page shows the hour address');
+  step('the screen shows the hour address');
   // Nothing starts without consent; then a regtest block, mined in the page.
   assert.ok(await page.getByTestId('start').isDisabled());
-  await page.getByTestId('consent').check();
+  await page.getByTestId('consent').click();
+  assert.equal(await page.getByTestId('consent').getAttribute('aria-checked'), 'true');
   const before = pool.found.length;
   await page.getByTestId('start').click();
   await until(() => pool.found.length > before, 120_000, 'a block from the page');
+  // The live graph has points, and can be switched off.
+  await page.locator('canvas[role=img]').waitFor();
+  await page.getByTestId('live-graph').click();
+  assert.equal(await page.locator('canvas[role=img]').count(), 0, 'graph off: no canvas drawn');
   await page.getByTestId('stop').click();
   const block = pool.found[before];
   assert.equal(block.user, hour.address, "the pool saw this hour's address, not the visitor's");
@@ -181,11 +193,11 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   assert.equal(got, reward, '10% of each block found in the page');
 
   step('paid');
-  // Analytics: an uncaught error (its message holds the address in the URL), then
-  // everything the page sent to PostHog.
-  await page.evaluate(() => setTimeout(() => {
-    throw new Error(`analytics test error on ${location.pathname}`);
-  }));
+  // Analytics: an uncaught error whose message holds the address, then everything
+  // the page sent to PostHog.
+  await page.evaluate((a) => setTimeout(() => {
+    throw new Error(`analytics test error for ${a}`);
+  }), address);
   const expected = ['$pageview', 'wallet_created', 'backup_downloaded', 'words_shared', 'words_copied', 'payout_address_chosen', 'wallet_restored'];
   expected.push('mining_consent_given', 'mining_started', 'mining_stopped', 'payout_checked', 'blocks_seen', '$exception');
   const names = () => new Set(ph.events().map((e) => e.event));
@@ -201,9 +213,9 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   for (let i = 1; i < words.length; i++) assert.ok(!sent.includes(`${words[i - 1]} ${words[i]}`), 'not even two of the words');
   assert.ok(!sent.includes(address), "never the visitor's address");
   assert.ok(!sent.includes(hour.address), 'never our address');
-  const pages = events.filter((e) => e.event === '$pageview').map((e) => new URL(e.properties.$current_url).pathname);
-  assert.ok(pages.includes('/mine/[address]') && pages.includes('/wallet'), pages.join(' '));
+  const pages = new Set(events.filter((e) => e.event === '$pageview').map((e) => new URL(e.properties.$current_url).pathname));
+  assert.deepEqual(pages, new Set(['/']), 'one screen');
   const exception = events.find((e) => e.event === '$exception');
-  assert.match(JSON.stringify(exception.properties.$exception_list), /analytics test error on \/mine\/\[address\]/);
+  assert.match(JSON.stringify(exception.properties.$exception_list), /analytics test error for \[address\]/);
   assert.deepEqual(ph.requests.filter((r) => /\/(static|flags|decide|array)\b/.test(r.path)), [], 'no remote config or scripts from PostHog');
 });

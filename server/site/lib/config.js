@@ -24,8 +24,8 @@ export function siteConfig(env = process.env) {
 }
 
 /**
- * Every event carries `app` with this value: the PostHog project is shared with
- * the owner's other apps, and this is how this site's events are told apart.
+ * Every event carries `app` with this value, which tells this site's events apart
+ * from any other app's in PostHog (the payout Worker's health event carries it too).
  */
 export const ANALYTICS_APP = 'project-tau';
 

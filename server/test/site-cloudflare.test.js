@@ -120,19 +120,18 @@ test('the site on Cloudflare: a wallet, the hour address rendered by the site Wo
   browser = await chromium.launch({ args: [...DESKTOP_ARGS] });
   const page = await (await desktopContext(browser)).newPage();
   page.on('pageerror', (e) => console.error('page error:', e.message));
-  await page.goto(`${site}/wallet`);
-  await page.getByRole('button', { name: 'Create a wallet' }).click();
-  await page.getByTestId('create').click();
+  await page.goto(`${site}/`);
+  await page.getByTestId('create-wallet').click();
   const address = (await page.getByTestId('new-address').innerText()).trim();
   assert.match(address, /^bcrt1q/);
   await page.getByTestId('saved').check();
-  await page.getByTestId('continue').click();
-  await page.waitForURL(`${site}/mine/${address}`);
+  await page.getByTestId('use-wallet').click();
+  assert.equal((await page.getByTestId('payout-address').innerText()).trim(), address);
   const hour = await (await fetch(`${service}/address`)).json();
   assert.equal((await page.getByTestId('mining-address').innerText()).trim(), hour.address, 'rendered by the site Worker from the payout Worker');
-  step('mine page shows the hour address');
+  step('the screen shows the hour address');
 
-  await page.getByTestId('consent').check();
+  await page.getByTestId('consent').click();
   const before = pool.found.length;
   await page.getByTestId('start').click();
   await until(() => pool.found.length > before, 120_000, 'a block from the page');

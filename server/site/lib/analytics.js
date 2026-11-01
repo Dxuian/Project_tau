@@ -1,10 +1,9 @@
 // Product analytics in the browser (PostHog), limited to what this site chooses
 // to send: page views, uncaught errors, and the named events passed to track().
 // Nothing reads the page: no autocapture, session replay, heatmaps, surveys or
-// web vitals, and no remote config or scripts from PostHog, because the wallet
-// page shows the visitor's 12 words. Bitcoin addresses are cut out of everything
-// sent (the mine page's URL holds the visitor's), and every event carries `app`
-// (lib/config.js).
+// web vitals, and no remote config or scripts from PostHog, because the page
+// shows a new wallet's 12 words. Bitcoin addresses are cut out of everything sent
+// (an error message may hold one), and every event carries `app` (lib/config.js).
 import posthog from 'posthog-js';
 
 // bech32 (bc1, tb1, bcrt1, either case) and base58 (1, 2, 3, m, n) addresses.

@@ -30,6 +30,7 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
 - The GitHub repo is public (nothing secret goes in it), with no license, and is not published to npm. Dependencies are exact-pinned and installed with `--ignore-scripts`. The library's runtime dependencies need the AUDIT.md treatment. These get `npm audit signatures`:
   - the site's framework dependencies (next, react, OpenNext);
   - its analytics, posthog-js: a release at least a week old, with provenance;
+  - its UI: Tailwind CSS v4 (`tailwindcss`, `@tailwindcss/postcss`, `postcss`; build time only), the Radix primitives under shadcn/ui (`@radix-ui/react-dialog`, `-switch`, `-slider`, `-slot`), `class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react` and `gsap`. They run on the page that shows the words, so a new one needs a real reason, and each version must be at least a week old, with provenance where its project publishes it (gsap, clsx and class-variance-authority don't);
   - the server's database packages (drizzle-orm, drizzle-kit, @tidbcloud/serverless).
 
 ## Library vs server (keep this split)
@@ -55,7 +56,11 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
       - `worker.js` holds the only Cloudflare-specific code: `connect` from `cloudflare:sockets`, `WebSocketPair`, `cf-connecting-ip`;
       - `d1-stores.js` with its own `schema.js` and `migrations/`;
       - `wrangler.toml`, with a cron every 15 minutes for payouts, the share purge and the health event. It has `global_fetch_strictly_public` too, so the health check can fetch the site.
-  - `site/`: the website, Next.js 16 App Router, plain JS.
+  - `site/`: the website, Next.js 16 App Router, plain JS: **one screen** (`app/page.js` renders `app/dashboard.js`), dark by default. `/wallet` and `/mine/:address` redirect to it (`next.config.mjs`).
+    - **UI:** shadcn/ui components in plain JS (`components/ui/`, `components.json`, `cn` in `lib/utils.js`, `@/` imports through `jsconfig.json`) on Tailwind CSS v4 (`postcss.config.mjs`, theme variables in `app/globals.css`), with GSAP for the motion. No daisyUI, which fights shadcn's theme.
+    - **The graph** (`components/hashrate-chart.js`) is a canvas redrawn only when the miner reports (every 2 s), not a chart library. Switched off, it isn't mounted at all. Keep it that cheap: it shares the CPU with mining.
+    - **The state** lives in `lib/hooks.js`: `useMiner` (consent-first: the miner loads only on Start), `usePayouts`, `useHour`, `useSavedAddress`. The analytics events and their names stay as they are, because the PostHog alerts count them.
+    - **Words and addresses** render with `translate="no"` and the `notranslate` class. Fields that hold either have spellcheck, autocomplete and autocorrect off. The words live only in `components/wallet-dialog.js`'s state, and never in a URL.
     - Client components (`'use client'`) import `tau-crypto/wallet`.
     - The library is copied in, not linked: `scripts/copy-library.mjs` copies `tau-crypto/dist` (on every build) to `lib/tau-crypto/` (imported as `tau-crypto/*` through `jsconfig.json`) and `public/tau-crypto/` (the miner, which the mine page loads at run time, so it is never bundled). The app needs nothing outside its folder, which OpenNext requires.
     - Server code reads `PAYOUT_API_URL`, `BRIDGE_URL`, `POOL_URL`, `NETWORK`, `POSTHOG_KEY` and `POSTHOG_HOST` at request time (the root layout is `force-dynamic` for this). `wrangler.jsonc` and `open-next.config.ts` are the Cloudflare (OpenNext) target; Vercel needs nothing extra.
@@ -67,7 +72,7 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
 
 ## Analytics (PostHog: the site, plus the payout Worker's health event)
 
-The wallet page shows the visitor's 12 words, and the site promises they never leave the device. So `site/lib/analytics.js` sends only what the site chooses:
+The page shows a new wallet's 12 words, and the site promises they never leave the device. So `site/lib/analytics.js` sends only what the site chooses:
 - **Never re-enable page-reading features:** autocapture, session replay, heatmaps, surveys, exception autocapture (it loads a script), remote config (`advanced_disable_flags`), or external scripts (`disable_external_dependency_loading`).
 - **Events are explicit:** `track(name, props)` calls, page views and uncaught errors (`posthog.captureException` on the window's error events).
 - **Props never carry words or addresses.** `before_send` (`prepareEvent`) also replaces every Bitcoin address with `[address]` and adds `app: "project-tau"` to every event. The PostHog project (702597) is Project Tau's own; `app` still marks every event, the health event's included.
