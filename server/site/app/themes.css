@@ -1,0 +1,612 @@
+/* The themes (lib/themes.js lists them; Arcade is the default). Each sets --t-* tokens,
+   and the [data-theme] rule maps them onto shadcn/ui's tokens, which the components use.
+   A theme applies to whatever carries data-theme: <html> for the page, and each tile in
+   the theme picker, which previews its theme. Ported from the 24-theme set. */
+
+:root {
+  --system-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --system-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+[data-theme] {
+  --background: var(--t-bg);
+  --foreground: var(--t-ink);
+  --card: var(--t-surface);
+  --card-foreground: var(--t-ink);
+  --popover: var(--t-popover, var(--t-bg));
+  --popover-foreground: var(--t-ink);
+  --primary: var(--t-accent);
+  --primary-foreground: var(--t-accent-ink);
+  --secondary: color-mix(in srgb, var(--t-ink) 10%, var(--t-bg));
+  --secondary-foreground: var(--t-ink);
+  --muted: color-mix(in srgb, var(--t-ink) 8%, var(--t-bg));
+  --muted-foreground: var(--t-muted);
+  --accent: color-mix(in srgb, var(--t-ink) 12%, var(--t-bg));
+  --accent-foreground: var(--t-ink);
+  --destructive: var(--t-err, #e5484d);
+  --success: var(--t-ok, #22c55e);
+  --border: var(--t-line);
+  --input: var(--t-line);
+  --ring: var(--t-accent);
+  --radius: var(--t-radius, 8px);
+  --panel-radius: var(--t-panel-radius, 12px);
+  --glow-a: color-mix(in srgb, var(--t-accent) 20%, transparent);
+  --glow-b: color-mix(in srgb, var(--t-zero, var(--t-accent)) 14%, transparent);
+  --grid: color-mix(in srgb, var(--t-ink) 5%, transparent);
+  --t-font-body: var(--system-sans);
+  --t-font-display: var(--system-sans);
+  --t-font-mono: var(--system-mono);
+  font-family: var(--t-font-body);
+}
+
+/* ---------- Tau, the earlier look ---------- */
+[data-theme='tau'] {
+  --t-bg: #0d0d15; --t-surface: rgba(28, 28, 42, 0.62); --t-popover: #17171f; --t-ink: #f4f4f8; --t-muted: #a2a2b8;
+  --t-accent: #f8a826; --t-accent-ink: #201505; --t-line: rgba(255, 255, 255, 0.085); --t-zero: #fbbf24; --t-err: #f0595e;
+  --t-radius: 12px; --t-panel-radius: 20px;
+}
+[data-theme='tau-light'] {
+  --t-bg: #faf8f4; --t-surface: rgba(255, 255, 255, 0.74); --t-popover: #fffdf9; --t-ink: #221c16; --t-muted: #6e655b;
+  --t-accent: #ec8a10; --t-accent-ink: #fffaf2; --t-line: rgba(34, 28, 22, 0.11); --t-zero: #f59e0b; --t-err: #d93b3b; --t-ok: #16a34a;
+  --t-radius: 12px; --t-panel-radius: 20px;
+}
+
+/* ---------- the 24 ---------- */
+[data-theme='ledger'] {
+  --t-bg: #edf2e8; --t-surface: #f7faf3; --t-ink: #1f3a5f; --t-muted: #55697e; --t-accent: #a93434; --t-accent-ink: #fff; --t-line: #bacbbb;
+  --t-radius: 2px; --t-panel-radius: 3px; --t-ok: #2f7d4a;
+  --t-font-display: 'IBM Plex Serif', serif; --t-font-body: 'IBM Plex Serif', serif; --t-font-mono: 'Courier Prime', monospace; --t-font-num: 'Courier Prime', monospace;
+  --t-pattern: repeating-linear-gradient(to bottom, transparent 0 30px, #d7e3d7 30px 31px);
+}
+[data-theme='vault'] {
+  --t-bg: #25292d; --t-surface: #30353a; --t-ink: #ece6d8; --t-muted: #a0a7ae; --t-accent: #c9a14a; --t-accent-ink: #1f1a0e; --t-line: #434a51;
+  --t-radius: 4px; --t-panel-radius: 8px;
+  --t-font-display: 'Barlow Condensed', sans-serif; --t-font-body: 'Barlow', sans-serif;
+}
+[data-theme='arcade'] {
+  --t-bg: #24104f; --t-surface: #341a6e; --t-popover: #2c1560; --t-ink: #fff4da; --t-muted: #c2b2ee; --t-accent: #ffd23f; --t-accent-ink: #24104f; --t-line: #55339e;
+  --t-zero: #ff6fae; --t-err: #ff6fae; --t-ok: #6ef2a6; --t-radius: 0px; --t-panel-radius: 0px; --t-mine: 0.78rem;
+  --t-font-display: 'Press Start 2P', monospace; --t-font-body: 'VT323', monospace; --t-font-mono: 'VT323', monospace; --t-font-num: 'VT323', monospace;
+  /* Its pixel fonts run small (VT323) and huge (Press Start 2P): scale both to a normal x-height. */
+  font-size-adjust: 0.53;
+}
+[data-theme='blueprint'] {
+  --t-bg: #133f7d; --t-surface: rgba(255, 255, 255, 0.07); --t-popover: #174a8f; --t-ink: #f2f7ff; --t-muted: #afc7ea; --t-accent: #fff; --t-accent-ink: #133f7d;
+  --t-line: rgba(255, 255, 255, 0.34); --t-zero: #8fe6ff; --t-err: #ffc7a8; --t-ok: #8fe6ff; --t-radius: 0px; --t-panel-radius: 2px;
+  --t-font-display: 'Chakra Petch', sans-serif; --t-font-body: 'Chakra Petch', sans-serif;
+  --t-pattern: linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  --t-pattern-size: 22px 22px;
+}
+[data-theme='terminal'] {
+  --t-bg: #0a0f0a; --t-surface: #0f170f; --t-ink: #4af07a; --t-muted: #2e8f4e; --t-accent: #4af07a; --t-accent-ink: #04140a; --t-line: #1c3a24;
+  --t-ok: #4af07a; --t-radius: 0px; --t-panel-radius: 4px;
+  --t-font-display: 'Space Mono', monospace; --t-font-body: 'Space Mono', monospace; --t-font-mono: 'Space Mono', monospace;
+  --t-pattern: repeating-linear-gradient(to bottom, rgba(74, 240, 122, 0.04) 0 2px, transparent 2px 4px);
+}
+[data-theme='neon'] {
+  --t-bg: #140b2b; --t-surface: #1e1142; --t-ink: #f5e9ff; --t-muted: #b79be6; --t-accent: #ff2e97; --t-accent-ink: #140b2b; --t-line: #3a2168;
+  --t-zero: #29e0ff; --t-radius: 6px; --t-panel-radius: 10px;
+  --t-font-display: 'Orbitron', sans-serif; --t-font-body: 'Rubik', sans-serif;
+  --t-pattern: radial-gradient(circle at 50% -10%, rgba(255, 46, 151, 0.2), transparent 60%);
+}
+[data-theme='swiss'] {
+  --t-bg: #f2f2f0; --t-surface: #fff; --t-ink: #111; --t-muted: #6a6a6a; --t-accent: #e4002b; --t-accent-ink: #fff; --t-line: #dad9d5;
+  --t-radius: 4px; --t-panel-radius: 6px; --t-ok: #15803d;
+  --t-font-display: 'Rubik', sans-serif; --t-font-body: 'Rubik', sans-serif;
+}
+[data-theme='gold'] {
+  --t-bg: #0c0c0e; --t-surface: #16161a; --t-ink: #ede3c8; --t-muted: #938a74; --t-accent: #d4af37; --t-accent-ink: #0c0c0e; --t-line: #2a2822;
+  --t-radius: 3px; --t-panel-radius: 4px;
+  --t-font-display: 'Playfair Display', serif; --t-font-body: 'Rubik', sans-serif;
+}
+[data-theme='comic'] {
+  --t-bg: #fff6db; --t-surface: #fff; --t-ink: #141414; --t-muted: #5a5a5a; --t-accent: #e8392b; --t-accent-ink: #fff; --t-line: #141414;
+  --t-radius: 6px; --t-panel-radius: 8px; --t-mine: 1.5rem; --t-ok: #15803d;
+  --t-font-display: 'Bebas Neue', sans-serif; --t-font-body: 'Rubik', sans-serif;
+  --t-pattern: radial-gradient(#f4d35e 1.3px, transparent 1.6px); --t-pattern-size: 14px 14px;
+}
+[data-theme='forest'] {
+  --t-bg: #f1efe3; --t-surface: #fbf9f0; --t-ink: #233524; --t-muted: #5c6b52; --t-accent: #3e7c47; --t-accent-ink: #fff; --t-line: #cfd3be;
+  --t-radius: 14px; --t-panel-radius: 16px; --t-ok: #3e7c47;
+  --t-font-display: 'DM Serif Display', serif; --t-font-body: 'Rubik', sans-serif;
+}
+[data-theme='brutal'] {
+  --t-bg: #fff; --t-surface: #fff; --t-ink: #000; --t-muted: #444; --t-accent: #1f4bff; --t-accent-ink: #fff; --t-line: #000;
+  --t-radius: 0px; --t-panel-radius: 0px; --t-ok: #15803d;
+  --t-font-display: 'Space Mono', monospace; --t-font-body: 'Space Mono', monospace; --t-font-mono: 'Space Mono', monospace;
+}
+[data-theme='sunset'] {
+  --t-bg: #2a1636; --t-surface: rgba(255, 255, 255, 0.08); --t-popover: #3a1f4a; --t-ink: #fff0e8; --t-muted: #e6b9c9; --t-accent: #ff8a5b; --t-accent-ink: #2a1636;
+  --t-line: rgba(255, 255, 255, 0.22); --t-radius: 12px; --t-panel-radius: 14px;
+  --t-font-display: 'Rubik', sans-serif; --t-font-body: 'Rubik', sans-serif;
+  --t-pattern: linear-gradient(160deg, #3a1c4a 0%, #7a2e52 45%, #c9553f 100%);
+}
+[data-theme='ocean'] {
+  --t-bg: #06283d; --t-surface: #0c3a54; --t-ink: #dff6ff; --t-muted: #7fb8ce; --t-accent: #35c4d6; --t-accent-ink: #04202e; --t-line: #17506a;
+  --t-radius: 10px; --t-panel-radius: 12px;
+  --t-font-display: 'Barlow', sans-serif; --t-font-body: 'Barlow', sans-serif;
+  --t-pattern: radial-gradient(circle at 80% 120%, rgba(53, 196, 214, 0.18), transparent 55%);
+}
+[data-theme='candy'] {
+  --t-bg: #ffe9f3; --t-surface: #fff; --t-ink: #5a2a46; --t-muted: #b07093; --t-accent: #ff5fa2; --t-accent-ink: #fff; --t-line: #ffc2dc;
+  --t-radius: 18px; --t-panel-radius: 20px; --t-ok: #16a34a;
+  --t-font-display: 'Rubik', sans-serif; --t-font-body: 'Rubik', sans-serif;
+  --t-pattern: radial-gradient(#ffd0e4 2px, transparent 2px); --t-pattern-size: 18px 18px;
+}
+[data-theme='copper'] {
+  --t-bg: #1e1712; --t-surface: #2a2017; --t-ink: #f0dfc4; --t-muted: #a68b6a; --t-accent: #c77b3b; --t-accent-ink: #1a120b; --t-line: #4a382a;
+  --t-radius: 4px; --t-panel-radius: 6px;
+  --t-font-display: 'Playfair Display', serif; --t-font-body: 'Barlow', sans-serif;
+}
+[data-theme='frost'] {
+  --t-bg: #eaf4fa; --t-surface: #fff; --t-ink: #1b3a4b; --t-muted: #5e7e8e; --t-accent: #2da8d8; --t-accent-ink: #fff; --t-line: #c7deea;
+  --t-radius: 8px; --t-panel-radius: 10px; --t-ok: #0f9d6b;
+  --t-font-display: 'Chakra Petch', sans-serif; --t-font-body: 'Rubik', sans-serif;
+}
+[data-theme='volcano'] {
+  --t-bg: #140a08; --t-surface: #221210; --t-ink: #ffe9d6; --t-muted: #b38a74; --t-accent: #ff5a1f; --t-accent-ink: #140a08; --t-line: #3a221a;
+  --t-zero: #ffc24b; --t-radius: 6px; --t-panel-radius: 8px;
+  --t-font-display: 'Orbitron', sans-serif; --t-font-body: 'Barlow', sans-serif;
+  --t-pattern: radial-gradient(circle at 50% 130%, rgba(255, 90, 31, 0.28), transparent 55%);
+}
+[data-theme='royal'] {
+  --t-bg: #1a0f2e; --t-surface: #261646; --t-ink: #f3e9ff; --t-muted: #b49ad6; --t-accent: #cba135; --t-accent-ink: #1a0f2e; --t-line: #3c2a5e;
+  --t-radius: 3px; --t-panel-radius: 5px;
+  --t-font-display: 'Playfair Display', serif; --t-font-body: 'Rubik', sans-serif;
+}
+[data-theme='mint'] {
+  --t-bg: #ecf7f1; --t-surface: #fff; --t-ink: #16352a; --t-muted: #5b7a6d; --t-accent: #15b87b; --t-accent-ink: #fff; --t-line: #c6e4d6;
+  --t-radius: 10px; --t-panel-radius: 12px; --t-ok: #15b87b;
+  --t-font-display: 'Rubik', sans-serif; --t-font-body: 'Rubik', sans-serif;
+}
+[data-theme='cyber'] {
+  --t-bg: #0a0e14; --t-surface: #121823; --t-ink: #d6f7ff; --t-muted: #6fa0b0; --t-accent: #00e5ff; --t-accent-ink: #06141a; --t-line: #1e3340;
+  --t-zero: #ff2bd6; --t-radius: 0px; --t-panel-radius: 2px;
+  --t-font-display: 'Orbitron', sans-serif; --t-font-body: 'Space Mono', monospace; --t-font-mono: 'Space Mono', monospace;
+  --t-pattern: linear-gradient(rgba(0, 229, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 229, 255, 0.05) 1px, transparent 1px);
+  --t-pattern-size: 26px 26px;
+}
+[data-theme='lottery'] {
+  --t-bg: #f2f6e1; --t-surface: #fff; --t-ink: #2b2340; --t-muted: #6b6585; --t-accent: #d61f2c; --t-accent-ink: #fff; --t-line: #d5dabf;
+  --t-radius: 6px; --t-panel-radius: 6px; --t-mine: 1.1rem; --t-ok: #2a9d4b;
+  --t-font-display: 'Bebas Neue', sans-serif; --t-font-body: 'Rubik', sans-serif; --t-font-mono: 'Space Mono', monospace; --t-font-num: 'Bebas Neue', sans-serif;
+  --t-pattern: repeating-radial-gradient(circle at 0 0, transparent 0 14px, rgba(214, 31, 44, 0.05) 14px 15px), repeating-radial-gradient(circle at 100% 100%, transparent 0 14px, rgba(43, 35, 64, 0.05) 14px 15px);
+}
+[data-theme='royale'] {
+  --t-bg: #0e4d2e; --t-surface: rgba(0, 0, 0, 0.24); --t-popover: #0c4227; --t-ink: #f6eed7; --t-muted: #bcd2c0; --t-accent: #e2b54a; --t-accent-ink: #1b1306;
+  --t-line: rgba(226, 181, 74, 0.38); --t-radius: 8px; --t-panel-radius: 14px; --t-mine: 1rem;
+  --t-font-display: 'Playfair Display', serif; --t-font-body: 'Rubik', sans-serif;
+  --t-pattern: radial-gradient(ellipse at 50% 35%, #17703f, #0b3a23 78%);
+}
+[data-theme='casinobtc'] {
+  --t-bg: #1a0b0b; --t-surface: #2a1212; --t-ink: #ffefd9; --t-muted: #c49a87; --t-accent: #f7931a; --t-accent-ink: #1a0b0b; --t-line: #4a2622;
+  --t-radius: 6px; --t-panel-radius: 10px; --t-mine: 2.6rem;
+  --t-font-display: 'Bebas Neue', sans-serif; --t-font-body: 'Rubik', sans-serif; --t-font-num: 'Bebas Neue', sans-serif;
+  --t-pattern: repeating-linear-gradient(135deg, rgba(247, 147, 26, 0.045) 0 14px, transparent 14px 28px);
+}
+[data-theme='deluxe'] {
+  --t-bg: #190a2e; --t-surface: rgba(255, 255, 255, 0.07); --t-popover: #22113d; --t-ink: #fff3d6; --t-muted: #c9b3ea; --t-accent: #ffc93c; --t-accent-ink: #2a1300;
+  --t-line: rgba(255, 201, 60, 0.32); --t-zero: #f7931a; --t-radius: 10px; --t-panel-radius: 16px; --t-mine: 2.8rem;
+  --t-font-display: 'Playfair Display', serif; --t-font-body: 'Rubik', sans-serif;
+  --t-pattern: radial-gradient(circle at 15% 0, rgba(255, 64, 160, 0.28), transparent 45%), radial-gradient(circle at 88% 8%, rgba(120, 80, 255, 0.32), transparent 45%),
+    repeating-conic-gradient(from 0deg at 50% -20%, rgba(255, 201, 60, 0.05) 0 6deg, transparent 6deg 12deg);
+}
+/* Only Arcade rescales its fonts; previews of other themes inside it don't. */
+[data-theme]:not([data-theme='arcade']) {
+  font-size-adjust: none;
+}
+
+/* ---------- the page behind the cards ---------- */
+.theme-pattern {
+  background-image: var(--t-pattern, none);
+  background-size: var(--t-pattern-size, auto);
+}
+/* Tau keeps its glows and grid; the others show their own pattern. */
+.backdrop-grid,
+.glow {
+  display: none;
+}
+[data-theme^='tau'] .backdrop-grid,
+[data-theme^='tau'] .glow {
+  display: block;
+}
+/* Arcade: CRT scanlines over everything. */
+html[data-theme='arcade'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.15) 0 2px, transparent 2px 4px);
+}
+/* Lottery: the ticket's perforated edge. */
+html[data-theme='lottery'] body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 12px;
+  z-index: 4;
+  pointer-events: none;
+  background: radial-gradient(circle at 0 50%, #c9cfb2 0 5px, transparent 5.5px) 0 0 / 12px 16px repeat-y;
+}
+
+/* ---------- cards ---------- */
+[data-theme='arcade'] [data-slot='card'] {
+  border-width: 2px;
+  box-shadow: 0 5px 0 #160936;
+}
+[data-theme='comic'] [data-slot='card'] {
+  border-width: 2px;
+  box-shadow: 4px 4px 0 #141414;
+}
+[data-theme='brutal'] [data-slot='card'] {
+  border-width: 2px;
+  box-shadow: 6px 6px 0 #000;
+}
+[data-theme='royale'] [data-slot='card'],
+[data-theme='deluxe'] [data-slot='card'] {
+  border-width: 2px;
+}
+/* Royale and Deluxe: marquee bulbs around the mining card. */
+.marquee {
+  display: none;
+}
+[data-theme='royale'] .marquee,
+[data-theme='deluxe'] .marquee {
+  --b: radial-gradient(circle, #fff1b8 0 2.6px, rgba(255, 241, 184, 0.25) 3.2px, transparent 4.5px);
+  display: block;
+  position: absolute;
+  inset: 5px;
+  z-index: 6;
+  pointer-events: none;
+  background:
+    var(--b) 0 0 / 16px 10px repeat-x,
+    var(--b) 0 100% / 16px 10px repeat-x,
+    var(--b) 0 0 / 10px 16px repeat-y,
+    var(--b) 100% 0 / 10px 16px repeat-y;
+  animation: t-bulbs 0.7s steps(2) infinite;
+}
+
+/* ---------- the mine button (Start / Stop) ---------- */
+.mine-btn {
+  position: relative;
+  flex-shrink: 0;
+  width: 10.4rem;
+  height: 10.4rem;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-family: var(--t-font-display);
+  color: var(--t-ink);
+  background: var(--t-surface);
+  border: 2px solid var(--t-line);
+  transition: transform 0.15s, box-shadow 0.25s, background 0.25s, opacity 0.2s;
+}
+.mine-btn:focus-visible {
+  outline: 2px solid var(--t-accent);
+  outline-offset: 4px;
+}
+.mine-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.mine-btn[data-running] {
+  border-color: var(--t-accent);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--t-accent) 24%, transparent);
+}
+.mine-btn > span {
+  position: relative;
+  z-index: 2;
+}
+.mine-label {
+  font-size: var(--t-mine, 1.3rem);
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+}
+.mine-sub {
+  font-size: 0.84rem;
+  opacity: 0.85;
+}
+.mine-btc {
+  display: none;
+}
+[data-theme='casinobtc'] .mine-btc,
+[data-theme='deluxe'] .mine-btc {
+  display: block;
+}
+[data-theme='casinobtc'] .mine-label:not(.mine-btc),
+[data-theme='deluxe'] .mine-label:not(.mine-btc) {
+  display: none;
+}
+
+[data-theme^='tau'] .mine-btn {
+  border: none;
+  color: #1d1305;
+  background: linear-gradient(145deg, #fcd34d, #f7931a);
+  box-shadow: 0 14px 40px -14px rgba(247, 147, 26, 0.75);
+}
+[data-theme^='tau'] .mine-btn[data-running] {
+  background: linear-gradient(145deg, #fde68a, #fb923c);
+  box-shadow: 0 0 0 6px rgba(247, 147, 26, 0.22), 0 0 46px rgba(247, 147, 26, 0.45);
+}
+[data-theme='ledger'] .mine-btn {
+  width: 11.25rem;
+  height: 7.25rem;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--t-accent);
+  border: 4px double var(--t-accent);
+  transform: rotate(-3deg);
+  font-family: 'Courier Prime', monospace;
+  letter-spacing: 0.05em;
+}
+[data-theme='ledger'] .mine-btn[data-running] {
+  background: var(--t-accent);
+  color: #fff;
+  transform: rotate(1deg);
+}
+[data-theme='vault'] .mine-btn {
+  border: 7px solid #191c1f;
+  color: var(--t-accent);
+  background: radial-gradient(circle, #3a4046 0 58%, transparent 59%), repeating-conic-gradient(var(--t-accent) 0 1.5deg, #2a2e33 1.5deg 12deg);
+  box-shadow: inset 0 0 0 2px #4c535a;
+}
+[data-theme='vault'] .mine-btn[data-running] {
+  box-shadow: inset 0 0 0 2px var(--t-accent), 0 0 26px rgba(201, 161, 74, 0.45);
+}
+[data-theme='arcade'] .mine-btn {
+  background: var(--t-accent);
+  color: var(--t-accent-ink);
+  border: 4px solid #1a0b3a;
+  box-shadow: 0 8px 0 #b08a16;
+  line-height: 1.5;
+}
+[data-theme='arcade'] .mine-btn:active:not(:disabled) {
+  transform: translateY(5px);
+  box-shadow: 0 3px 0 #b08a16;
+}
+[data-theme='arcade'] .mine-btn[data-running] {
+  background: #ff6fae;
+  box-shadow: 0 8px 0 #a83d6e;
+}
+[data-theme='blueprint'] .mine-btn {
+  background: transparent;
+  border: 2px solid var(--t-ink);
+}
+[data-theme='blueprint'] .mine-btn::before {
+  content: '';
+  position: absolute;
+  inset: -13px;
+  border-radius: 50%;
+  border: 1px dashed var(--t-line);
+}
+[data-theme='blueprint'] .mine-btn[data-running] {
+  background: rgba(143, 230, 255, 0.12);
+  border-color: #8fe6ff;
+}
+[data-theme='terminal'] .mine-btn {
+  border-radius: 0;
+  background: transparent;
+  border: 1px solid var(--t-accent);
+}
+[data-theme='terminal'] .mine-btn[data-running] {
+  background: rgba(74, 240, 122, 0.1);
+}
+[data-theme='neon'] .mine-btn {
+  background: transparent;
+  border: 2px solid var(--t-accent);
+  color: var(--t-accent);
+  text-shadow: 0 0 8px var(--t-accent);
+}
+[data-theme='neon'] .mine-btn[data-running] {
+  box-shadow: 0 0 22px var(--t-accent), inset 0 0 22px rgba(255, 46, 151, 0.3);
+}
+[data-theme='gold'] .mine-btn,
+[data-theme='royal'] .mine-btn {
+  background: transparent;
+  border: 1px solid var(--t-accent);
+  color: var(--t-accent);
+}
+[data-theme='royal'] .mine-btn {
+  border-width: 2px;
+}
+[data-theme='gold'] .mine-btn[data-running] {
+  box-shadow: 0 0 0 1px var(--t-accent), 0 0 24px rgba(212, 175, 55, 0.35);
+}
+[data-theme='royal'] .mine-btn[data-running] {
+  box-shadow: 0 0 0 1px var(--t-accent), 0 0 24px rgba(203, 161, 53, 0.4);
+}
+[data-theme='comic'] .mine-btn {
+  background: var(--t-accent);
+  color: #fff;
+  border: 3px solid #141414;
+  box-shadow: 5px 5px 0 #141414;
+}
+[data-theme='comic'] .mine-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 #141414;
+}
+[data-theme='forest'] .mine-btn {
+  border-radius: 46% 54% 52% 48% / 54% 46% 54% 46%;
+}
+[data-theme='brutal'] .mine-btn {
+  border-radius: 0;
+  border-width: 3px;
+  border-color: #000;
+  box-shadow: 6px 6px 0 #000;
+}
+[data-theme='brutal'] .mine-btn[data-running] {
+  background: var(--t-accent);
+  color: #fff;
+  box-shadow: 6px 6px 0 var(--t-accent);
+}
+[data-theme='sunset'] .mine-btn {
+  background: linear-gradient(145deg, #ffb36b, #ff6b9e);
+  color: #2a1636;
+  border: none;
+}
+[data-theme='ocean'] .mine-btn {
+  background: radial-gradient(circle at 50% 30%, #0e4a68, #0c3a54);
+  border: 2px solid var(--t-accent);
+}
+[data-theme='candy'] .mine-btn {
+  background: linear-gradient(145deg, #ff8ac0, #ff5fa2);
+  color: #fff;
+  border: 3px solid #fff;
+  box-shadow: 0 6px 16px rgba(255, 95, 162, 0.4);
+}
+[data-theme='copper'] .mine-btn {
+  border: 6px solid #3a2a1c;
+  color: var(--t-accent);
+  background: radial-gradient(circle, #36291c 0 56%, transparent 57%), repeating-conic-gradient(#c77b3b 0 2deg, #4a382a 2deg 14deg);
+}
+[data-theme='copper'] .mine-btn[data-running] {
+  box-shadow: 0 0 22px rgba(199, 123, 59, 0.4);
+}
+[data-theme='frost'] .mine-btn {
+  background: linear-gradient(160deg, #fff, #dceff8);
+  border: 2px solid var(--t-accent);
+}
+[data-theme='frost'] .mine-btn[data-running] {
+  box-shadow: 0 0 0 5px rgba(45, 168, 216, 0.2), 0 0 18px rgba(45, 168, 216, 0.3);
+}
+[data-theme='volcano'] .mine-btn {
+  background: radial-gradient(circle at 50% 70%, #ff5a1f, #7a1e06 70%);
+  color: #fff;
+  border: 2px solid #ff8a4b;
+}
+[data-theme='volcano'] .mine-btn[data-running] {
+  box-shadow: 0 0 26px rgba(255, 90, 31, 0.6);
+}
+[data-theme='mint'] .mine-btn {
+  background: #fff;
+  border: 2px solid var(--t-accent);
+}
+[data-theme='cyber'] .mine-btn {
+  border-radius: 0;
+  clip-path: polygon(22% 0, 100% 0, 100% 78%, 78% 100%, 0 100%, 0 22%);
+  background: transparent;
+  border: 2px solid var(--t-accent);
+  color: var(--t-accent);
+}
+[data-theme='cyber'] .mine-btn[data-running] {
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.5);
+  background: rgba(0, 229, 255, 0.08);
+}
+[data-theme='lottery'] .mine-btn {
+  border: none;
+  color: #2b2340;
+  background: radial-gradient(circle at 35% 28%, #ff8c8c, #d61f2c 55%, #7e0e17);
+  box-shadow: 0 10px 18px rgba(126, 14, 23, 0.3);
+}
+[data-theme='lottery'] .mine-btn::before {
+  content: '';
+  position: absolute;
+  inset: 24%;
+  border-radius: 50%;
+  background: #fff;
+  z-index: 1;
+}
+[data-theme='lottery'] .mine-btn[data-running] {
+  animation: t-wobble 1.2s ease-in-out infinite;
+  box-shadow: 0 10px 24px rgba(214, 31, 44, 0.45);
+}
+[data-theme='royale'] .mine-btn {
+  border: 5px solid #b8913a;
+  color: #f6eed7;
+  background: #111;
+  overflow: hidden;
+}
+[data-theme='royale'] .mine-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  z-index: 0;
+  background: repeating-conic-gradient(#c8102e 0 10deg, #151515 10deg 20deg);
+}
+[data-theme='royale'] .mine-btn::after {
+  content: '';
+  position: absolute;
+  inset: 23%;
+  border-radius: 50%;
+  z-index: 1;
+  background: radial-gradient(circle, #2b1f0c, #0e0b05);
+  box-shadow: 0 0 0 3px #e2b54a;
+}
+[data-theme='royale'] .mine-btn[data-running]::before {
+  animation: t-spin 2.4s linear infinite;
+}
+[data-theme='casinobtc'] .mine-btn {
+  border: none;
+  color: #1a0b0b;
+  background: radial-gradient(circle, #fff4e3 0 46%, #f7931a 46.5% 50%, transparent 50.5%), repeating-conic-gradient(#c8102e 0 15deg, #fff4e3 15deg 30deg);
+  box-shadow: 0 0 0 6px #7a0a14, 0 8px 20px rgba(0, 0, 0, 0.5);
+}
+[data-theme='casinobtc'] .mine-btn[data-running] {
+  box-shadow: 0 0 0 6px #7a0a14, 0 0 28px rgba(247, 147, 26, 0.6);
+}
+[data-theme='deluxe'] .mine-btn {
+  border: none;
+  color: #7a4a00;
+  background: radial-gradient(circle at 35% 30%, #fff4b0, #ffc93c 45%, #c98a0a 75%);
+  overflow: visible;
+}
+[data-theme='deluxe'] .mine-btn::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  z-index: 0;
+  background: repeating-conic-gradient(#ffe08a 0 6deg, #b8860b 6deg 12deg);
+  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 9px), #000 calc(100% - 8px));
+  mask: radial-gradient(closest-side, transparent calc(100% - 9px), #000 calc(100% - 8px));
+}
+[data-theme='deluxe'] .mine-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  z-index: 1;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.6) 50%, transparent 65%) -180px 0 / 200% 100% no-repeat;
+}
+[data-theme='deluxe'] .mine-btn[data-running]::before {
+  animation: t-spin 3s linear infinite;
+}
+[data-theme='deluxe'] .mine-btn[data-running]::after {
+  animation: t-glint 1.6s ease-in-out infinite;
+}
+[data-theme='deluxe'] .mine-btn[data-running] {
+  box-shadow: 0 0 30px rgba(255, 201, 60, 0.55);
+}
+
+@keyframes t-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes t-wobble {
+  25% {
+    transform: rotate(-8deg);
+  }
+  75% {
+    transform: rotate(8deg);
+  }
+}
+@keyframes t-glint {
+  to {
+    background-position: 180px 0;
+  }
+}
+@keyframes t-bulbs {
+  50% {
+    background-position: 8px 0, 8px 100%, 0 8px, 100% 8px;
+  }
+}

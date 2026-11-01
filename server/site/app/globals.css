@@ -1,58 +1,8 @@
 @import 'tailwindcss';
 
-/* shadcn/ui's theme: dark by default (<html class="dark">), light when the visitor picks it. */
+/* shadcn/ui's tokens come from the active theme (app/themes.css, on <html data-theme>).
+   The dark class is set for dark themes, for the dark: variants. */
 @custom-variant dark (&:is(.dark *));
-
-:root {
-  --radius: 0.9rem;
-  --background: oklch(0.985 0.003 80);
-  --foreground: oklch(0.18 0.012 60);
-  --card: oklch(1 0 0 / 72%);
-  --card-foreground: var(--foreground);
-  --popover: oklch(0.995 0.002 80);
-  --popover-foreground: var(--foreground);
-  --primary: oklch(0.72 0.18 55);
-  --primary-foreground: oklch(0.99 0.01 60);
-  --secondary: oklch(0.95 0.006 80);
-  --secondary-foreground: var(--foreground);
-  --muted: oklch(0.95 0.006 80);
-  --muted-foreground: oklch(0.49 0.015 60);
-  --accent: oklch(0.93 0.012 80);
-  --accent-foreground: var(--foreground);
-  --destructive: oklch(0.58 0.22 27);
-  --success: oklch(0.62 0.16 152);
-  --border: oklch(0.18 0.012 60 / 10%);
-  --input: oklch(0.18 0.012 60 / 14%);
-  --ring: oklch(0.72 0.18 55);
-  --glow-a: oklch(0.8 0.16 65 / 35%);
-  --glow-b: oklch(0.75 0.14 300 / 22%);
-  --grid: oklch(0.18 0.012 60 / 6%);
-}
-
-.dark {
-  --background: oklch(0.125 0.012 275);
-  --foreground: oklch(0.97 0.004 275);
-  --card: oklch(0.19 0.016 275 / 62%);
-  --card-foreground: var(--foreground);
-  --popover: oklch(0.18 0.016 275);
-  --popover-foreground: var(--foreground);
-  --primary: oklch(0.78 0.17 62);
-  --primary-foreground: oklch(0.2 0.04 55);
-  --secondary: oklch(0.25 0.016 275);
-  --secondary-foreground: var(--foreground);
-  --muted: oklch(0.25 0.016 275);
-  --muted-foreground: oklch(0.7 0.02 275);
-  --accent: oklch(0.27 0.02 275);
-  --accent-foreground: var(--foreground);
-  --destructive: oklch(0.67 0.2 24);
-  --success: oklch(0.78 0.16 155);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.78 0.17 62);
-  --glow-a: oklch(0.7 0.18 60 / 22%);
-  --glow-b: oklch(0.55 0.22 295 / 20%);
-  --grid: oklch(1 0 0 / 4%);
-}
 
 @theme inline {
   --color-background: var(--background);
@@ -74,13 +24,16 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 6px);
-  --radius-md: calc(var(--radius) - 4px);
-  --radius-lg: calc(var(--radius) - 2px);
-  --radius-xl: var(--radius);
-  --radius-2xl: calc(var(--radius) + 6px);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--panel-radius) * 0.75);
+  --radius-2xl: var(--panel-radius);
+  /* The theme's type: body text, headings (font-display), code and addresses (font-mono), big numbers (font-num). */
+  --font-sans: var(--t-font-body);
+  --font-display: var(--t-font-display);
+  --font-mono: var(--t-font-mono);
+  --font-num: var(--t-font-num, var(--t-font-mono));
 }
 
 @layer base {
@@ -97,12 +50,12 @@
     @apply bg-background text-foreground antialiased;
   }
   ::selection {
-    background: oklch(0.78 0.17 62 / 35%);
+    background: color-mix(in srgb, var(--t-accent) 35%, transparent);
   }
 }
 
-/* The page's backdrop: two slow glows over a faint grid. Transforms and opacity only, so it costs
-   the compositor, not the CPU the miner uses. */
+/* The page's backdrop: the theme's pattern; for Tau, two slow glows over a faint grid (themes.css
+   picks). Transforms and opacity only, so it costs the compositor, not the CPU the miner uses. */
 .backdrop-grid {
   background-image:
     linear-gradient(to right, var(--grid) 1px, transparent 1px),
@@ -147,13 +100,13 @@
   }
 }
 
-/* The hashrate card while mining. */
+/* The mining card while mining, in the theme's accent. */
 .mining-ring {
   position: absolute;
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: conic-gradient(from var(--angle, 0deg), transparent 0 60%, oklch(0.78 0.17 62 / 90%) 75%, oklch(0.85 0.15 85 / 90%) 82%, transparent 92%);
+  background: conic-gradient(from var(--angle, 0deg), transparent 0 60%, color-mix(in srgb, var(--t-accent) 90%, transparent) 75%, color-mix(in srgb, var(--t-zero, var(--t-accent)) 90%, transparent) 82%, transparent 92%);
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);

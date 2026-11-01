@@ -26,11 +26,12 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
 
 - **Everything runs in Docker.** Never run node, npm, tsc, emcc, wrangler, next or tests on the host. Library: `tau-crypto/dev <cmd>` (see `tau-crypto/CLAUDE.md`). Server: `server/dev <cmd>` (it uses the top-level `docker-compose.yml`, working directory `server/`).
 - **No live mining or real-network pool connections from this machine.** Tests use mocks, a private regtest bitcoind (`docker compose` service `bitcoind`: no peers, `-connect=0`), a local TiDB (service `tidb`, in memory) and local workerd via Miniflare / `wrangler dev`. Never `wrangler deploy`, `wrangler login`, `opennextjs-cloudflare deploy`, `vercel`, `server/dev db migrate` / `npm run db:migrate` or anything else that touches the user's TiDB Cloud: deployment is the user's step with their own accounts. The connection string (`DB_PASSWORD`) never goes into a file. wrangler and Next.js telemetry are off in the containers (`WRANGLER_SEND_METRICS`, `NEXT_TELEMETRY_DISABLED`).
-- **Consent-first:** nothing mines until a visitor starts it. Don't add stealth features.
+- **Consent-first:** nothing mines until a visitor presses the mine button (that press is the consent; there's no separate checkbox). Don't add stealth features.
 - The GitHub repo is public (nothing secret goes in it), with no license, and is not published to npm. Dependencies are exact-pinned and installed with `--ignore-scripts`. The library's runtime dependencies need the AUDIT.md treatment. These get `npm audit signatures`:
   - the site's framework dependencies (next, react, OpenNext);
   - its analytics, posthog-js: a release at least a week old, with provenance;
   - its UI: Tailwind CSS v4 (`tailwindcss`, `@tailwindcss/postcss`, `postcss`; build time only), the Radix primitives under shadcn/ui (`@radix-ui/react-dialog`, `-switch`, `-slider`, `-slot`), `class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react` and `gsap`. They run on the page that shows the words, so a new one needs a real reason, and each version must be at least a week old, with provenance where its project publishes it (gsap, clsx and class-variance-authority don't);
+  - the themes' fonts: 13 `@fontsource/*` packages (CSS and font files only, with provenance), imported in `app/fonts.js`. Never load fonts from Google or another host: the page would then talk to a third party;
   - the server's database packages (drizzle-orm, drizzle-kit, @tidbcloud/serverless).
 
 ## Library vs server (keep this split)
@@ -57,7 +58,11 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
       - `d1-stores.js` with its own `schema.js` and `migrations/`;
       - `wrangler.toml`, with a cron every 15 minutes for payouts, the share purge and the health event. It has `global_fetch_strictly_public` too, so the health check can fetch the site.
   - `site/`: the website, Next.js 16 App Router, plain JS: **one screen** (`app/page.js` renders `app/dashboard.js`), dark by default. `/wallet` and `/mine/:address` redirect to it (`next.config.mjs`).
-    - **UI:** shadcn/ui components in plain JS (`components/ui/`, `components.json`, `cn` in `lib/utils.js`, `@/` imports through `jsconfig.json`) on Tailwind CSS v4 (`postcss.config.mjs`, theme variables in `app/globals.css`), with GSAP for the motion. No daisyUI, which fights shadcn's theme.
+    - **UI:** shadcn/ui components in plain JS (`components/ui/`, `components.json`, `cn` in `lib/utils.js`, `@/` imports through `jsconfig.json`) on Tailwind CSS v4 (`postcss.config.mjs`, `app/globals.css`), with GSAP for the motion. No daisyUI, which fights shadcn's theme.
+    - **Themes:** `lib/themes.js` lists them (Arcade is the default, on `<html data-theme>`), `app/themes.css` styles them, and `components/theme-picker.js` switches them.
+      - Each theme sets `--t-*` tokens, which `[data-theme]` maps onto shadcn's. Each has its own `.mine-btn` look.
+      - Components use the tokens (`bg-primary`, `font-display`, `font-num`, `font-mono`), never fixed colors, so every theme applies.
+      - `THEME_SCRIPT`, a constant inline script in `<head>`, applies the saved theme before paint.
     - **The graph** (`components/hashrate-chart.js`) is a canvas redrawn only when the miner reports (every 2 s), not a chart library. Switched off, it isn't mounted at all. Keep it that cheap: it shares the CPU with mining.
     - **The state** lives in `lib/hooks.js`: `useMiner` (consent-first: the miner loads only on Start), `usePayouts`, `useHour`, `useSavedAddress`. The analytics events and their names stay as they are, because the PostHog alerts count them.
     - **Words and addresses** render with `translate="no"` and the `notranslate` class. Fields that hold either have spellcheck, autocomplete and autocorrect off. The words live only in `components/wallet-dialog.js`'s state, and never in a URL.

@@ -33,20 +33,3 @@ export function countdown(ms) {
 }
 
 export const btc = (sats) => `${(Number(sats) / 1e8).toFixed(8)} BTC`;
-
-/** The network's hash rate, roughly (about 10^21 hashes a second), for the odds. */
-export const NETWORK_HPS = 1e21;
-
-/** How long `hps` takes, on average, to find a block: "3.8 billion years". */
-export function oddsText(hps) {
-  if (!(hps > 0)) return null;
-  const years = (NETWORK_HPS / hps) * 600 / 31_557_600;
-  const big = [
-    [1e12, 'trillion'],
-    [1e9, 'billion'],
-    [1e6, 'million'],
-    [1e3, 'thousand'],
-  ];
-  for (const [n, word] of big) if (years >= n) return `${(years / n).toFixed(years / n >= 100 ? 0 : 1)} ${word} years`;
-  return `${Math.round(years)} years`;
-}

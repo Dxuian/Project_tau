@@ -1,10 +1,12 @@
 // A burst of confetti (GSAP) for a block found by the visitor's miner. Skipped for reduced motion.
 import { gsap } from 'gsap';
 
-const COLORS = ['#f7931a', '#fbbf24', '#fde68a', '#a78bfa', '#f472b6', '#34d399'];
-
 export function celebrate() {
   if (typeof window === 'undefined' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  // The theme's colors (app/themes.css), and a few more.
+  const style = getComputedStyle(document.documentElement);
+  const theme = ['--t-accent', '--t-zero', '--t-ink'].map((v) => style.getPropertyValue(v).trim()).filter(Boolean);
+  const COLORS = [...theme, '#f7931a', '#fbbf24', '#a78bfa', '#f472b6', '#34d399'];
   const layer = document.createElement('div');
   layer.setAttribute('aria-hidden', 'true');
   layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:60';

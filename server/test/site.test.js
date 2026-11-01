@@ -109,8 +109,10 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   const page = await context.newPage();
   page.on('pageerror', (e) => console.error('page error:', e.message));
 
-  // One screen. No address yet: create a wallet in the browser.
+  // One screen, in Arcade by default. No address yet, so nothing to mine to: create a wallet in the browser.
   await page.goto(`${site}/`);
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'arcade');
+  assert.ok(await page.getByTestId('start').isDisabled(), 'no payout address yet');
   await page.getByTestId('create-wallet').click();
   const words = (await page.getByTestId('words').getByTestId('word').allInnerTexts()).map((w) => w.trim());
   assert.equal(words.length, 12);
@@ -163,10 +165,16 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   assert.equal(new URL((await fetch(`${site}/mine/${address}`, { redirect: 'manual' })).headers.get('location'), site).pathname, '/');
 
   step('the screen shows the hour address');
-  // Nothing starts without consent; then a regtest block, mined in the page.
-  assert.ok(await page.getByTestId('start').isDisabled());
-  await page.getByTestId('consent').click();
-  assert.equal(await page.getByTestId('consent').getAttribute('aria-checked'), 'true');
+  // A theme from the picker applies at once, and stays after a reload.
+  await page.getByTestId('theme-button').click();
+  await page.getByTestId('theme-terminal').click();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'terminal');
+  await page.reload();
+  await page.getByTestId('payout-address').waitFor();
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'terminal', 'remembered on the device');
+  // Nothing mines until the mine button is pressed; then a regtest block, mined in the page.
+  assert.equal((await page.getByTestId('state').innerText()).trim(), 'Idle');
   const before = pool.found.length;
   await page.getByTestId('start').click();
   await until(() => pool.found.length > before, 120_000, 'a block from the page');
@@ -199,7 +207,7 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
     throw new Error(`analytics test error for ${a}`);
   }), address);
   const expected = ['$pageview', 'wallet_created', 'backup_downloaded', 'words_shared', 'words_copied', 'payout_address_chosen', 'wallet_restored'];
-  expected.push('mining_consent_given', 'mining_started', 'mining_stopped', 'payout_checked', 'blocks_seen', '$exception');
+  expected.push('theme_changed', 'mining_started', 'mining_stopped', 'payout_checked', 'blocks_seen', '$exception');
   const names = () => new Set(ph.events().map((e) => e.event));
   try {
     await until(() => expected.every((n) => names().has(n)), 30_000, 'the analytics events');

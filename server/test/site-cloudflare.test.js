@@ -131,7 +131,6 @@ test('the site on Cloudflare: a wallet, the hour address rendered by the site Wo
   assert.equal((await page.getByTestId('mining-address').innerText()).trim(), hour.address, 'rendered by the site Worker from the payout Worker');
   step('the screen shows the hour address');
 
-  await page.getByTestId('consent').click();
   const before = pool.found.length;
   await page.getByTestId('start').click();
   await until(() => pool.found.length > before, 120_000, 'a block from the page');

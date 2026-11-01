@@ -49,11 +49,12 @@ Slot N (one an hour) is receive index N of our wallet: `1 + whole hours since TA
 
 ## The website (`server/site`)
 
-**One screen**, dark by default (a toggle switches to light). Built with shadcn/ui on Tailwind CSS v4, with GSAP for the motion.
+**One screen**, in 26 themes: Arcade by default; the theme button switches and remembers the choice on the device. Built with shadcn/ui on Tailwind CSS v4, with GSAP for the motion.
+- **Themes:** the 24 of the theme set (Ledger, Vault, Blueprint, Terminal, Neon, … the casinos), plus Tau, the earlier look, dark and light. Each has its colors, fonts, background and its own mine button. The fonts are self-hosted from npm (`@fontsource`), so the page never calls Google Fonts.
 - **Left, the miner:**
-  - your hashrate (big, animated), shares, uptime, threads and the block being mined;
-  - a **live graph** of the last 3 minutes. Switch it off and the CPU it used goes to mining;
-  - the controls: an explicit "I agree" before Start, a speed slider, Stop. Mining pauses when the tab is hidden.
+  - the **mine button**: nothing loads or mines until it's pressed; pressed again, it stops. Mining pauses when the tab is hidden;
+  - your hashrate (big, animated), shares, uptime, threads, the block being mined, and a speed slider;
+  - a **live graph** of the last 3 minutes. Switch it off and the CPU it used goes to mining.
 - **Right, the details:**
   - **your payout address**. Paste one you have, **create a wallet** on the spot, or **restore** one from its backup file. The wallet is made in the browser, and its 12 words never reach us. They show in a dialog where you can:
     - **download** a `.txt` backup;
@@ -62,14 +63,13 @@ Slot N (one an hour) is receive index N of our wallet: `1 + whole hours since TA
 
     The device remembers only the address, never in a URL. The words and addresses are marked `translate="no"`, and the backup box has spellcheck off, so neither page translation nor a spellcheck service sees them.
   - **this hour's mining address**, rendered on the server, with a countdown to the next one;
-  - **your blocks**: each block you found, waiting for 100 confirmations (with progress) or paid (with the transaction). Confetti when one appears;
-  - **your odds** at your current speed.
+  - **your blocks**: each block you found, waiting for 100 confirmations (with progress) or paid (with the transaction). Confetti when one appears.
 - **Old links:** `/wallet` and `/mine/<address>` redirect to the one screen.
 - **The library is copied in at build time.** `tau-crypto/dist` goes to `lib/tau-crypto/` (what the page imports) and to `public/tau-crypto/` (the miner). The page loads the miner only when you press Start, so it is never bundled.
 - **Analytics (PostHog)**, when `POSTHOG_KEY` is set (`lib/analytics.js`). Only what the site sends itself:
   - page views (`/` only now; Bitcoin addresses are cut out of everything anyway);
   - uncaught errors, for PostHog's error tracking. The browser source maps are served next to the scripts (`next.config.mjs`), so stack traces resolve without an upload step;
-  - named events, none of which carry words or addresses: wallet created, backup downloaded, words copied or shared, wallet restored, payout address chosen, mining consent, start, stop, speed, errors and unavailable, payout checks, blocks seen, live graph switched.
+  - named events, none of which carry words or addresses: wallet created, backup downloaded, words copied or shared, wallet restored, payout address chosen, mining start, stop, speed, errors and unavailable, payout checks, blocks seen, live graph switched, theme changed.
 
   Nothing reads the page: no autocapture, session replay, heatmaps or surveys, and no remote config or scripts from PostHog, because the page shows a new wallet's 12 words. Every event carries `app: "project-tau"`. The page says analytics is on.
 

@@ -6,8 +6,6 @@ import { gsap } from 'gsap';
 import { useEffect, useRef } from 'react';
 import { rateText } from '@/lib/format';
 
-const ORANGE = '#f7931a';
-const AMBER = '#fbbf24';
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** A round number just above `v`, for the y axis. */
@@ -16,6 +14,22 @@ function niceMax(v) {
   const p = 10 ** Math.floor(Math.log10(v));
   for (const m of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p;
   return 10 * p;
+}
+
+/** `color` (any CSS color) with alpha `a`, normalised through a canvas context. */
+function alpha(ctx, color, a) {
+  ctx.fillStyle = '#000';
+  ctx.fillStyle = color;
+  const c = ctx.fillStyle;
+  const [r, g, b] = c.startsWith('#') ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) : c.match(/[\d.]+/g).map(Number);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
+/** The theme's accent and second color (app/themes.css), read where the canvas is. */
+function themeColors(canvas) {
+  const style = getComputedStyle(canvas);
+  const accent = style.getPropertyValue('--t-accent').trim() || '#f7931a';
+  return { accent, second: style.getPropertyValue('--t-zero').trim() || accent };
 }
 
 function draw(canvas, samples, now, windowMs) {
@@ -91,24 +105,25 @@ function draw(canvas, samples, now, windowMs) {
   ctx.beginPath();
   ctx.rect(pad.l, 0, w + 1, height);
   ctx.clip();
+  const { accent, second } = themeColors(canvas);
   const fill = ctx.createLinearGradient(0, pad.t, 0, pad.t + h);
-  fill.addColorStop(0, 'rgba(247, 147, 26, 0.32)');
-  fill.addColorStop(1, 'rgba(247, 147, 26, 0)');
+  fill.addColorStop(0, alpha(ctx, accent, 0.32));
+  fill.addColorStop(1, alpha(ctx, accent, 0));
   ctx.fillStyle = fill;
   ctx.fill(area);
   const stroke = ctx.createLinearGradient(pad.l, 0, pad.l + w, 0);
-  stroke.addColorStop(0, AMBER);
-  stroke.addColorStop(1, ORANGE);
+  stroke.addColorStop(0, second);
+  stroke.addColorStop(1, accent);
   ctx.strokeStyle = stroke;
   ctx.lineWidth = 2.25;
   ctx.lineJoin = 'round';
-  ctx.shadowColor = 'rgba(247, 147, 26, 0.6)';
+  ctx.shadowColor = alpha(ctx, accent, 0.6);
   ctx.shadowBlur = 14;
   ctx.stroke(line);
   ctx.restore();
 
   const [lx, ly] = pts[pts.length - 1];
-  ctx.fillStyle = ORANGE;
+  ctx.fillStyle = accent;
   ctx.globalAlpha = 0.22;
   ctx.beginPath();
   ctx.arc(lx, ly, 9, 0, Math.PI * 2);

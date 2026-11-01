@@ -70,7 +70,7 @@ export default function PayoutCard({ network, address, ready, locked, onChoose, 
           <WalletIcon className="size-4 text-primary" />
           Your payout address
         </CardTitle>
-        <CardDescription>If your miner finds a block, your 10% goes here.</CardDescription>
+        <CardDescription>Where your payout is sent.</CardDescription>
         {address && !editor && (
           <CardAction>
             <Button variant="ghost" size="sm" onClick={() => setEditing(true)} disabled={locked} title={locked ? 'Stop mining to change it' : undefined} data-testid="change-address">

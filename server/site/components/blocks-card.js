@@ -31,7 +31,7 @@ export default function BlocksCard({ network, address, payouts, checkedAt, check
           <BlocksIcon className="size-4 text-primary" />
           Your blocks
         </CardTitle>
-        <CardDescription>10% of each (about 0.31 BTC plus fees), paid after 100 confirmations.</CardDescription>
+        <CardDescription>Paid out after 100 confirmations.</CardDescription>
         <CardAction>
           <Button variant="outline" size="sm" onClick={onCheck} disabled={!address || checking} data-testid="check-payout">
             <RefreshCwIcon className={checking ? 'animate-spin' : undefined} />
@@ -76,7 +76,7 @@ export default function BlocksCard({ network, address, payouts, checkedAt, check
         )}
         {checkedAt > 0 && (
           <p className="mt-3 text-[11px] text-muted-foreground">
-            Checked {new Date(checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, again every 5 minutes. We check that your miner found a block before paying.
+            Checked {new Date(checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, again every 5 minutes.
           </p>
         )}
       </CardContent>

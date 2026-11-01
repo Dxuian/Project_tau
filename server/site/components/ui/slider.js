@@ -16,7 +16,7 @@ function Slider({ className, defaultValue, value, min = 0, max = 100, thumbLabel
       {...props}
     >
       <SliderPrimitive.Track data-slot="slider-track" className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-muted">
-        <SliderPrimitive.Range data-slot="slider-range" className="absolute h-full bg-gradient-to-r from-amber-400 to-primary" />
+        <SliderPrimitive.Range data-slot="slider-range" className="absolute h-full bg-primary" />
       </SliderPrimitive.Track>
       {values.map((_, i) => (
         <SliderPrimitive.Thumb
