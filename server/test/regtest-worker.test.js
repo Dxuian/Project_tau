@@ -5,14 +5,14 @@
 // pays the visitor 10% of the block, once.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { request as httpRequest } from 'node:http';
+import { createServer as createHttpServer, request as httpRequest } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Miniflare } from 'miniflare';
 import { accountXpub, createWallet, newAddress } from '../../tau-crypto/dist/wallet.js';
 import { startRegtestPool } from './regtest-pool.js';
-import { FAST_SLOTS, bundleWorker, migrateD1, mineBlocks, nodeReady, ownerReward, regtest, regtestChainEnv, slotAddresses } from './helpers.js';
+import { FAST_SLOTS, bundleWorker, migrateD1, mineBlocks, nodeReady, ownerReward, regtest, regtestChainEnv, slotAddresses, startFakePostHog, until } from './helpers.js';
 
 const core = regtest();
 
@@ -89,6 +89,57 @@ test("the Worker's Cloudflare glue in workerd: origin and target refusals, 502 f
   assert.match(down.body, /could not connect to 127\.0\.0\.1/);
   const health = await (await mf.dispatchFetch('http://worker.local/health')).json();
   assert.equal(health.canPay, false, 'no OWNER_MNEMONIC: records only');
+});
+
+test("the Worker's cron run: the payout sweep, the share purge, then one health event to PostHog", async (t) => {
+  const { out } = bundleWorker(t);
+  const owner = createWallet({ network: 'regtest' });
+  const ph = await startFakePostHog();
+  t.after(() => ph.close());
+  // A stand-in site: its /api/address answers, as when it reaches the payout Worker.
+  const site = createHttpServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{"address":"bcrt1qsiteanswer","index":1}');
+  });
+  await new Promise((resolve) => site.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => site.close(resolve)));
+  const mf = new Miniflare({
+    modules: true,
+    scriptPath: join(out, 'worker.js'),
+    modulesRoot: out,
+    compatibilityDate: '2026-07-30',
+    d1Databases: ['DB'],
+    bindings: {
+      TAU_TARGET: 'cloudflare',
+      TAU_NETWORK: 'regtest',
+      TAU_POOL: 'stratum+tcp://127.0.0.1:3333',
+      TAU_OWNER_ADDRESS: owner.address,
+      OWNER_MNEMONIC: owner.mnemonic,
+      TAU_STORAGE: 'd1',
+      TAU_POSTHOG_KEY: 'phc_tautest',
+      TAU_POSTHOG_HOST: ph.url,
+      TAU_SITE_URL: `http://127.0.0.1:${site.address().port}`,
+    },
+  });
+  t.after(() => mf.dispose());
+  await mf.ready;
+  await migrateD1(await mf.getD1Database('DB'));
+  await (await mf.getWorker()).scheduled({ cron: '*/15 * * * *' });
+  await until(() => ph.events().length > 0, 15_000, 'the health event');
+  const [event] = ph.events();
+  assert.equal(event.event, 'payout_health');
+  assert.deepEqual(event.properties, {
+    app: 'project-tau',
+    target: 'cloudflare',
+    network: 'regtest',
+    ok: true,
+    can_pay: true,
+    sweep_ok: true,
+    purge_ok: true,
+    site_ok: true,
+    $process_person_profile: false,
+  });
+  assert.equal(ph.events().length, 1, 'one event per run');
 });
 
 test('Cloudflare target: a visitor mines to a fresh owner address through the Worker and is paid 10%, once', { skip: !core && 'BITCOIND_RPC not set (run server/dev test)', timeout: 300_000 }, async (t) => {

@@ -84,8 +84,10 @@ Slot N (one an hour) is receive index N of our wallet: `1 + whole hours since TA
 | `TAU_CHAIN`, `TAU_CHAIN_URL` | `esplora`, `https://mempool.space/api` | or `bitcoin-core` with `TAU_CHAIN_USER` / `TAU_CHAIN_PASS` for your own node |
 | `TAU_STORAGE` | `file` (Node), `d1` (Cloudflare); our `wrangler.toml` sets `tidb` | `tidb`: TiDB Cloud on either target, tables in the database `TAU_DB_NAME` (default `tau`); `file`: `TAU_STORAGE_DIR` (default `payout-ledger`); `d1`: `TAU_D1_BINDING` (default `DB`) |
 | `DB_PASSWORD` | none | a secret: TiDB Cloud's connection string, `mysql://user:password@host:4000/db`, for `tidb` |
-| `TAU_SHARE_RETENTION_DAYS` | `30` | ordinary shares older than this are deleted every hour; blocks and payouts are always kept. `0` keeps everything. |
+| `TAU_SHARE_RETENTION_DAYS` | `30` | ordinary shares older than this are deleted by each cron run (Node: hourly); blocks and payouts are always kept. `0` keeps everything. |
 | `TAU_ORIGINS` | none | web pages allowed to connect and call the API directly, comma-separated |
+| `TAU_POSTHOG_KEY`, `TAU_POSTHOG_HOST` | none, `https://us.i.posthog.com` | where each cron run sends its health event (see Alerts): PostHog's public project key (`phc_…`), never a personal key. Unset or unusable: no event, which the health alert reports. |
+| `TAU_SITE_URL` | none | the site, whose `/api/address` each health event checks |
 | `TAU_MIN_CONFIRMATIONS`, `TAU_MAX_FEE_RATE` | `100`, `200` | the minimum confirmations before paying (at least 100); the most it will pay in fees, in sat/vB |
 | `TAU_LISTEN`, `TAU_HOST`, `TAU_SWEEP_INTERVAL_MS` | `8080`, all interfaces, `0` | Node only. The sweep pays every visitor with a mature block on a timer; on Cloudflare, use the cron trigger. |
 
@@ -109,7 +111,7 @@ The payout service keeps its records in **TiDB Cloud** (MySQL), through **Drizzl
   - After editing a schema, run `server/dev db generate <name>` and commit the new migration. A test fails if a schema changed without one.
   - Never edit a migration that has been applied.
 - **Applying them:** for TiDB, `npm run db:migrate` (`tidb/migrate.js`). It creates the database `tau` if needed and runs the migrations it hasn't run yet. Run it before deploying a version that brings a migration. For D1, run `wrangler d1 migrations apply`.
-- **Growth:** ordinary shares older than `TAU_SHARE_RETENTION_DAYS` are purged every hour, by the Worker's cron or the Node timer. Blocks and payouts stay.
+- **Growth:** ordinary shares older than `TAU_SHARE_RETENTION_DAYS` are purged by the Worker's cron (every 15 minutes) or the Node timer (hourly). Blocks and payouts stay.
 
 ## Deploy
 
@@ -157,24 +159,19 @@ The bridge doesn't do TLS itself, so for `wss://` put it behind nginx or Caddy.
 
 ## Alerts
 
-`.github/workflows/alerts.yml` runs every 15 minutes on GitHub. Each check that fails opens an issue labelled `alert`. The title names the cause and the issue mentions the repo owner, so GitHub notifies them once, by email and in the GitHub app. The issue closes itself, with a comment, when the check passes again.
+Five alerts in Project Tau's PostHog project, each named for its cause. PostHog checks them every hour and emails the owner.
 
-| Check | Alert |
+| Alert | Fires when |
 |---|---|
-| the payout Worker's `/health` answers `ok` | the payout service is down |
-| `/health` says `canPay` | the payout service can't pay (`OWNER_MNEMONIC` missing or wrong) |
-| the site's home page loads | the website is down |
-| the site's `/api/address` answers | the website can't reach the payout service |
-| PostHog¹: `blocks_seen` in the last 20 minutes | a visitor's miner found a block |
-| PostHog¹: `$exception` | errors in visitors' browsers |
-| PostHog¹: `mining_unavailable` | visitors saw "mining unavailable" |
-| PostHog¹: over 10 `mining_error` | mining errors |
+| a visitor's miner found a block | `blocks_seen` this hour |
+| errors in visitors' browsers | `$exception` this hour |
+| visitors saw "mining unavailable" | `mining_unavailable` this hour |
+| mining errors (over 10 an hour) | over 10 `mining_error` this hour |
+| payout service unhealthy or silent | the last full hour had no good `payout_health` event, or a bad one |
 
-¹ With the repository secret `POSTHOG_READ_KEY`, a PostHog personal API key with only the `query:read` scope, on the project. Without it these are skipped. A bad key opens "the PostHog check can't run".
+The payout Worker's cron runs every 15 minutes. Each run sends a `payout_health` event (`server/health.js`): `can_pay` (the words are set), `sweep_ok` (the payout sweep ran), `purge_ok` (the share purge ran), `site_ok` (the site's `/api/address` answers, so the site is up and reaches the payout Worker) and `ok`. A broken deploy, setting or cron sends nothing, which fires the alert just the same. The events hold only these booleans. The "Project Tau" dashboard in PostHog shows them, with the visitor events.
 
-The repository is public, so these issues and the workflow's logs are too. They hold causes and counts only. To see what an alert looks like, run the workflow from the Actions tab with "test" ticked; the next run closes the test alert.
-
-PostHog itself has one alert, "Project Tau: needs a look", on the same signals, hourly. The free plan allows 5 per project. Dependabot and secret scanning alerts are repository settings, which only the owner can turn on (Settings, in its Security section).
+Dependabot and secret scanning alerts are repository settings, which only the owner can turn on (Settings, in its Security section).
 
 ## How a win is verified
 

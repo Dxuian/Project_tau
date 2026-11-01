@@ -7,18 +7,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The top level holds only these; don't add top-level folders or files:
 - `tau-crypto/` (the library);
 - `server/` (everything deployed, with its tests and tooling);
-- `.github/` (the Alerts workflow and its script; the owner approved it);
 - `README.md`, `CLAUDE.md`, `docker-compose.yml` (server/'s containers) and `.gitignore`.
 
-There is no upstream clone. `tau-crypto/dev vendor` fetches the pinned cpuminer-opt into the library's cache volume.
+There is no upstream clone. `tau-crypto/dev vendor` fetches the pinned cpuminer-opt into the library's cache volume. There is no `.github/`: the alerts live in PostHog (GitHub's scheduled runs were hours apart).
 
-## Alerts (`.github/`)
+## Alerts (PostHog)
 
-`.github/workflows/alerts.yml` runs `.github/scripts/alerts.sh` every 15 minutes on GitHub's runners (not this machine).
-- **What it checks:** the payout Worker's `/health` (`ok`, `canPay`), the site's home page and `/api/address`. With the `POSTHOG_READ_KEY` secret (a read-only PostHog personal key), it also counts, in the last 20 minutes, `blocks_seen`, `$exception` and `mining_unavailable`, and `mining_error` over 10.
-- **How it alerts:** each failing check keeps one open issue labelled `alert`, keyed by an `<!-- alert:id -->` marker. The issue mentions the repo owner, because scheduled-run emails go to whoever pushed the cron line (`unnat-bharol`, not the owner `Dxuian`). It closes with a comment once the check passes. The run fails only when it can't manage the issues.
-- **Public:** the repo is public, so its issues and Actions logs are too. Write causes and counts only, never event contents.
-- **Trying it:** `DRY_RUN=1` prints the issue operations instead of running them. A manual run with `test` ticked opens a test alert, which the next run closes. Lint with actionlint and shellcheck (in Docker).
+Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for its cause. They are checked hourly and emailed to the owner. They and the "Project Tau" dashboard were made through PostHog's API with the owner's personal key, which never goes in the repo.
+- **What visitors' pages report** (the current hour): `blocks_seen` over 0, `$exception` over 0, `mining_unavailable` over 0, `mining_error` over 10.
+- **The payout service:**
+  - Every cron run (every 15 minutes) sends a `payout_health` event (`server/health.js`, from `scheduled` in `cloudflare/worker.js`). It carries `can_pay`, `sweep_ok`, `purge_ok`, `site_ok` (the site's `/api/address`, which also proves the site reaches this service) and `ok`.
+  - Its alert, "payout service unhealthy or silent", looks at the last complete hour: A (events with `ok` true) − 10 × B (events with `ok` false) below 1. So it fires on silence (a broken deploy, settings or cron sends nothing) and on any bad event.
+- **The event:** booleans and public settings only, never a secret, an address or anything about a visitor.
+  - Settings: `TAU_POSTHOG_KEY` (a `phc_` project key; `healthTarget` refuses anything else), `TAU_POSTHOG_HOST` and `TAU_SITE_URL`.
+  - A missing or unusable value stops the event (and so fires the alert), never the service.
 
 ## Rules
 
@@ -42,6 +44,7 @@ There is no upstream clone. `tau-crypto/dev vendor` fetches the pinned cpuminer-
   - The payout service:
     - `config.js` (`loadConfig`: every setting from `TAU_*` env vars or Worker vars; `chainFromConfig`, `addressPeriod`);
     - `api.js` (`createPayoutApi`: the library's `createPayoutService` with config, stores and `OWNER_MNEMONIC`; a web-standard `fetch(request)` for `GET /address`, `POST /payout`, `GET /health`);
+    - `health.js` (`sendHealth`: the cron's `payout_health` event for PostHog's alerts; see Alerts);
     - `node/` (`server.js` entry, `index.js` `startNodeServer`, `file-stores.js`);
     - `tidb/`: TiDB Cloud (MySQL) for either target, the production store:
       - `tidb-stores.js`;
@@ -51,7 +54,7 @@ There is no upstream clone. `tau-crypto/dev vendor` fetches the pinned cpuminer-
     - `cloudflare/`:
       - `worker.js` holds the only Cloudflare-specific code: `connect` from `cloudflare:sockets`, `WebSocketPair`, `cf-connecting-ip`;
       - `d1-stores.js` with its own `schema.js` and `migrations/`;
-      - `wrangler.toml`, with an hourly cron for payouts and the share purge.
+      - `wrangler.toml`, with a cron every 15 minutes for payouts, the share purge and the health event. It has `global_fetch_strictly_public` too, so the health check can fetch the site.
   - `site/`: the website, Next.js 16 App Router, plain JS.
     - Client components (`'use client'`) import `tau-crypto/wallet`.
     - The library is copied in, not linked: `scripts/copy-library.mjs` copies `tau-crypto/dist` (on every build) to `lib/tau-crypto/` (imported as `tau-crypto/*` through `jsconfig.json`) and `public/tau-crypto/` (the miner, which the mine page loads at run time, so it is never bundled). The app needs nothing outside its folder, which OpenNext requires.
@@ -62,13 +65,13 @@ There is no upstream clone. `tau-crypto/dev vendor` fetches the pinned cpuminer-
 - Server code imports the library's committed `dist/`. After changing library code, run `tau-crypto/dev build` and commit `dist/`.
 - The payout Worker must not import `dist/index.js` (it would bundle the WASM miner). `server/test/regtest-worker.test.js` checks the bundle; `tau-crypto/test/entries.test.ts` checks that the edge entries carry no Node built-ins, WASM or Cloudflare names.
 
-## Analytics (PostHog, site only)
+## Analytics (PostHog: the site, plus the payout Worker's health event)
 
 The wallet page shows the visitor's 12 words, and the site promises they never leave the device. So `site/lib/analytics.js` sends only what the site chooses:
 - **Never re-enable page-reading features:** autocapture, session replay, heatmaps, surveys, exception autocapture (it loads a script), remote config (`advanced_disable_flags`), or external scripts (`disable_external_dependency_loading`).
 - **Events are explicit:** `track(name, props)` calls, page views and uncaught errors (`posthog.captureException` on the window's error events).
-- **Props never carry words or addresses.** `before_send` (`prepareEvent`) also replaces every Bitcoin address with `[address]` and adds `app: "project-tau"` to every event. The PostHog project is shared with the owner's other apps; `app` tells them apart.
-- **Keys:** only the public `phc_` project key goes in config (`POSTHOG_KEY`). The personal API key (`phx_`) never goes in the site, its settings or the repository.
+- **Props never carry words or addresses.** `before_send` (`prepareEvent`) also replaces every Bitcoin address with `[address]` and adds `app: "project-tau"` to every event. The PostHog project (702597) is Project Tau's own; `app` still marks every event, the health event's included.
+- **Keys:** only the public `phc_` project key goes in config (the site's `POSTHOG_KEY`, the payout Worker's `TAU_POSTHOG_KEY`). A personal API key (`phx_`) never goes in either Worker, their settings or the repository. `server/test/config.test.js` checks both wrangler files.
 - **Tests:**
   - `server/test/site.test.js` runs the whole flow against a stand-in PostHog (`startFakePostHog`). It fails if any request contains the words, two adjacent words or an address, or if PostHog's config or scripts are fetched.
   - Playwright pages must open in `desktopContext(browser)`, from a browser launched with `DESKTOP_ARGS`. Otherwise posthog-js treats the browser as a bot (`navigator.webdriver`, or a HeadlessChrome user agent or brand) and sends nothing.

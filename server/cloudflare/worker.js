@@ -2,8 +2,9 @@
 // One Worker serves the payout bridge (WebSocket upgrades) and the payout API
 // (GET /address, POST /payout, GET /health). Records live in TiDB Cloud
 // (TAU_STORAGE=tidb, connection string in the DB_PASSWORD secret) or in D1.
-// A cron trigger, if configured, pays every visitor with a mature block and
-// purges old ordinary shares.
+// A cron trigger, if configured, pays every visitor with a mature block, purges
+// old ordinary shares, and sends a health event to PostHog (health.js), whose
+// alerts fire on a bad one or when they stop.
 //
 // The Cloudflare-specific part is here, not in the library: the library's
 // fetch bridge gets Workers' TCP sockets (connect) and WebSocketPair.
@@ -11,6 +12,7 @@ import { connect } from 'cloudflare:sockets';
 import { createFetchBridge, poolTarget } from '../../tau-crypto/dist/bridge.js';
 import { createPayoutApi, toJson } from '../api.js';
 import { chainFromConfig, loadConfig, shareCutoff } from '../config.js';
+import { sendHealth } from '../health.js';
 import { tidbDatabase } from '../tidb/client.js';
 import { tidbStores } from '../tidb/tidb-stores.js';
 import { d1Stores } from './d1-stores.js';
@@ -70,9 +72,24 @@ export default {
   },
   async scheduled(_event, env, ctx) {
     const a = get(env);
+    // A configuration error sends no health event: PostHog's alert fires when they stop.
     if (a.error) throw a.error;
-    ctx.waitUntil(a.api.payoutAll().then((r) => console.log(`payout sweep: ${toJson(r)}`)));
+    // Each job resolves true (done), false (failed: logged) or null (not configured).
+    const outcome = (what, job) =>
+      job.then(
+        (result) => (console.log(`${what}: ${result}`), true),
+        (err) => (console.log(`${what} failed: ${err.message}`), false),
+      );
+    const sweep = outcome('payout sweep', a.api.payoutAll().then(toJson));
     const cutoff = shareCutoff(a.config);
-    if (cutoff) ctx.waitUntil(a.stores.purge(cutoff).then((n) => console.log(`purged ${n} old share records`)));
+    const purge = cutoff ? outcome('share purge', a.stores.purge(cutoff).then((n) => `${n} old share records`)) : Promise.resolve(null);
+    ctx.waitUntil(
+      Promise.all([sweep, purge])
+        .then(([sweepOk, purgeOk]) => sendHealth(a.config, { canPay: a.api.service.canPay, sweepOk, purgeOk }))
+        .then(
+          (r) => console.log(r.sent ? `health event sent (ok: ${r.properties.ok})` : `health event not sent: ${r.reason ?? `PostHog answered ${r.status}`}`),
+          (err) => console.log(`health event failed: ${err.message}`),
+        ),
+    );
   },
 };

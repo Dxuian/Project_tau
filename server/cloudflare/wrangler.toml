@@ -13,6 +13,9 @@
 name = "project-tau"
 main = "worker.js"
 compatibility_date = "2026-07-30"
+# The cron's health check fetches the site, another Worker on the same workers.dev
+# subdomain: without this flag that fetch fails (Cloudflare error 1042).
+compatibility_flags = ["global_fetch_strictly_public"]
 # Served on project-tau.deathxunnat.workers.dev only: no per-version preview URLs,
 # which would keep every old version of the payout service, secrets included, reachable.
 workers_dev = true
@@ -39,10 +42,17 @@ TAU_DB_NAME = "tau"
 TAU_SHARE_RETENTION_DAYS = "30"
 # The site (server/site, the Worker tau-site).
 TAU_ORIGINS = "https://tau-site.deathxunnat.workers.dev"
+# Each cron run sends a health event (health.js) to PostHog, whose alerts fire when one
+# reports a problem or they stop. A project key (phc_, write-only, public like the site's);
+# never a personal phx_ key. The run also checks the site's /api/address.
+TAU_POSTHOG_KEY = "phc_xSKFvnfVqCRCa6cUY6ahrpxxaaHas6Qc6LbgtvuoFCwn"
+TAU_POSTHOG_HOST = "https://us.i.posthog.com"
+TAU_SITE_URL = "https://tau-site.deathxunnat.workers.dev"
 
-# Every hour: pay every visitor with a mature block, and purge old shares.
+# Every 15 minutes: pay every visitor with a mature block, purge old shares, and send
+# the health event (PostHog's health alert expects one every hour at least).
 [triggers]
-crons = ["0 * * * *"]
+crons = ["*/15 * * * *"]
 
 # For D1 instead of TiDB: npx wrangler d1 create tau-payouts -c cloudflare/wrangler.toml,
 # set TAU_STORAGE = "d1" and TAU_D1_BINDING = "DB", uncomment the block below, and apply the

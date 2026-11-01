@@ -1,6 +1,7 @@
 // loadConfig(): every setting is a parameter, and bad settings fail clearly.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { poolTarget } from '../../tau-crypto/dist/bridge.js';
 import { memoryStores } from '../../tau-crypto/dist/payouts.js';
 import { accountXpub, createWallet, newAddress } from '../../tau-crypto/dist/wallet.js';
@@ -125,4 +126,18 @@ test('hourly addresses need the xpub or the words, and both must be the owner ad
   assert.throws(() => createPayoutApi(config, { ...memoryStores(), chain: {} }), /need TAU_OWNER_XPUB or OWNER_MNEMONIC/);
   const wrong = loadConfig({ TAU_OWNER_ADDRESS: OWNER, TAU_OWNER_XPUB: accountXpub(createWallet().mnemonic) });
   assert.throws(() => createPayoutApi(wrong, { ...memoryStores(), chain: {} }), /TAU_OWNER_XPUB is not the wallet of TAU_OWNER_ADDRESS/);
+});
+
+test('the health event settings; the wrangler files hold PostHog project keys only', () => {
+  const c = loadConfig({ TAU_OWNER_ADDRESS: OWNER });
+  assert.deepEqual([c.posthog, c.siteUrl], [{ key: undefined, host: 'https://us.i.posthog.com' }, undefined], 'no key: no health event');
+  const d = loadConfig({ TAU_OWNER_ADDRESS: OWNER, TAU_POSTHOG_KEY: 'phc_x', TAU_POSTHOG_HOST: 'https://eu.i.posthog.com', TAU_SITE_URL: 'https://site.example' });
+  assert.deepEqual([d.posthog, d.siteUrl], [{ key: 'phc_x', host: 'https://eu.i.posthog.com' }, 'https://site.example']);
+  // An unusable key stops only the health event (health.js refuses it), never the service.
+  assert.doesNotThrow(() => loadConfig({ TAU_OWNER_ADDRESS: OWNER, TAU_POSTHOG_KEY: 'phx_nope' }));
+  // The repository is public: both Workers' settings may hold only PostHog's public project keys.
+  const [worker, site] = ['../cloudflare/wrangler.toml', '../site/wrangler.jsonc'].map((f) => readFileSync(new URL(f, import.meta.url), 'utf8'));
+  for (const text of [worker, site]) assert.doesNotMatch(text, /phx_[A-Za-z0-9]/, 'no personal PostHog key');
+  assert.match(worker, /^TAU_POSTHOG_KEY = "phc_[A-Za-z0-9]+"$/m);
+  assert.match(site, /"POSTHOG_KEY": "phc_[A-Za-z0-9]+"/);
 });

@@ -31,6 +31,10 @@ export const DEFAULTS = Object.freeze({
   host: undefined,
   /** Node: run payoutAll() this often (0 = only on request). Cloudflare uses a cron trigger instead. */
   sweepIntervalMs: 0,
+  /** Where the Worker's cron sends its health event (health.js): a PostHog project key (phc_, public) and host; no key, no event. */
+  posthog: Object.freeze({ key: undefined, host: 'https://us.i.posthog.com' }),
+  /** The site, which each health event checks (GET /api/address); unset, no check. */
+  siteUrl: undefined,
 });
 
 const int = (value, fallback, name) => {
@@ -49,7 +53,8 @@ const list = (value) => (value ? String(value).split(',').map((s) => s.trim()).f
  *   TAU_CHAIN (esplora | bitcoin-core), TAU_CHAIN_URL, TAU_CHAIN_USER, TAU_CHAIN_PASS,
  *   TAU_STORAGE (file | d1 | tidb | memory), TAU_STORAGE_DIR, TAU_D1_BINDING, TAU_DB_NAME,
  *   TAU_SHARE_RETENTION_DAYS,
- *   TAU_ORIGINS (comma-separated), TAU_LISTEN, TAU_HOST, TAU_SWEEP_INTERVAL_MS.
+ *   TAU_ORIGINS (comma-separated), TAU_LISTEN, TAU_HOST, TAU_SWEEP_INTERVAL_MS,
+ *   TAU_POSTHOG_KEY, TAU_POSTHOG_HOST, TAU_SITE_URL.
  * `overrides` (an object with the same keys as DEFAULTS) win over the environment.
  */
 export function loadConfig(env = globalThis.process?.env ?? {}, overrides = {}) {
@@ -83,6 +88,9 @@ export function loadConfig(env = globalThis.process?.env ?? {}, overrides = {}) 
     listen: int(env.TAU_LISTEN, DEFAULTS.listen, 'TAU_LISTEN'),
     host: env.TAU_HOST ?? DEFAULTS.host,
     sweepIntervalMs: int(env.TAU_SWEEP_INTERVAL_MS, DEFAULTS.sweepIntervalMs, 'TAU_SWEEP_INTERVAL_MS'),
+    // Unusable values only stop the health event (health.js says why), never the service.
+    posthog: { key: env.TAU_POSTHOG_KEY || DEFAULTS.posthog.key, host: env.TAU_POSTHOG_HOST || DEFAULTS.posthog.host },
+    siteUrl: env.TAU_SITE_URL || DEFAULTS.siteUrl,
     ...overrides,
   };
   return validateConfig(config);
