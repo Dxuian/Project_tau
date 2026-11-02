@@ -60,7 +60,7 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
       - `wrangler.toml`, with a cron every 15 minutes for payouts, the share purge and the health event. It has `global_fetch_strictly_public` too, so the health check can fetch the site.
   - `site/`: the website, Next.js 16 App Router, plain JS: **one screen** (`app/page.js` renders `app/dashboard.js`). `/wallet` and `/mine/:address` redirect to it (`next.config.mjs`).
     - **A first visit opens with the tutorial** (`components/tutorial.js`), which explains how Bitcoin mining works to a visitor new to it, in plain words. It shows until it's closed once (skipped or finished), which `useTutorial` remembers in `localStorage` (`tau.tutorial`). "See tutorial" in the miner's header opens it again in a dialog, and mining carries on underneath.
-      - Keep its claims true: the numbers (3.125 BTC, about 19 zeros, about a billion trillion guesses a second, 100 confirmations) date from 2026.
+      - Keep its claims true: the numbers (3.125 BTC, about 19 zeros, 100 confirmations) date from 2026.
       - Its guess game hashes in the browser (Web Crypto) and sends nothing.
       - As in the rest of the site, there's no 10% or "lottery ticket" copy.
     - **Then the wallet setup** (`components/wallet-setup.js`): until the device has a payout address, there is no mine button at all. It offers three ways: create a wallet (`components/recovery-phrase.js`, with a "saved it" confirmation), upload a file (`readWalletFile` in `lib/backup.js`) or paste an address. The miner's "Change" returns to it.

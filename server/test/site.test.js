@@ -114,11 +114,11 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'arcade');
   await page.getByTestId('tutorial').waitFor();
   assert.equal(await page.getByTestId('setup').count(), 0, 'the tutorial first');
-  assert.equal((await page.getByTestId('tutorial-count').innerText()).trim(), '1 / 8');
-  for (let i = 0; i < 4; i++) await page.getByTestId('tutorial-next').click();
+  assert.equal((await page.getByTestId('tutorial-count').innerText()).trim(), '1 / 5');
+  for (let i = 0; i < 2; i++) await page.getByTestId('tutorial-next').click();
   await page.getByTestId('guess-many').click();
   await page.getByTestId('guess-result').getByText(/^Best of 1,000 guesses: \d+ zeros?\. A winning hash needs about 19\.$/).waitFor();
-  for (let i = 0; i < 3; i++) await page.getByTestId('tutorial-next').click();
+  for (let i = 0; i < 2; i++) await page.getByTestId('tutorial-next').click();
   assert.equal((await page.getByTestId('tutorial-next').innerText()).trim(), 'Set up my wallet');
   await page.getByTestId('tutorial-next').click();
   assert.equal(await page.evaluate(() => localStorage.getItem('tau.tutorial')), 'seen', 'remembered: it opens by itself only once');
@@ -203,7 +203,7 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   // While it mines, "See tutorial" opens the tutorial again, over the miner.
   await page.getByTestId('see-tutorial').click();
   await page.getByRole('dialog').getByTestId('tutorial').waitFor();
-  assert.equal((await page.getByTestId('tutorial-count').innerText()).trim(), '1 / 8');
+  assert.equal((await page.getByTestId('tutorial-count').innerText()).trim(), '1 / 5');
   await page.keyboard.press('Escape');
   await page.getByTestId('tutorial').waitFor({ state: 'detached' });
   await until(() => pool.found.length > before, 120_000, 'a block from the page');

@@ -53,24 +53,6 @@ function Chip({ icon: Icon, title, note }) {
 
 export const STEPS = [
   {
-    title: 'How Bitcoin mining works',
-    art: (
-      <Art>
-        <Coin x={140} r={42} />
-        <Sparkle x={74} y={26} s={1} />
-        <Sparkle x={212} y={80} s={1.2} />
-        <Sparkle x={222} y={22} s={0.7} />
-        <Sparkle x={60} y={86} s={0.6} />
-      </Art>
-    ),
-    body: (
-      <>
-        <p>A quick tour before you start: what Bitcoin is, what your wallet is for, and what your browser does when it mines.</p>
-        <p>It takes about a minute. You can skip it, and open it again any time from the miner.</p>
-      </>
-    ),
-  },
-  {
     title: 'Bitcoin has no boss',
     art: (
       <Art>
@@ -88,12 +70,10 @@ export const STEPS = [
     body: (
       <>
         <p>
-          Bitcoin is money that runs on thousands of computers around the world instead of a bank. Each of them keeps a copy of the same record of who owns what, and
-          checks every payment against the same rules.
+          Bitcoin is money run by thousands of computers around the world, not a bank. They all keep the same record and check every payment. That&apos;s what{' '}
+          <b>decentralized</b> means: no one is in charge, and no one can change the record on their own.
         </p>
-        <p>
-          That&apos;s what <b>decentralized</b> means: no company or government is in charge, and no single computer can change the record on its own.
-        </p>
+        <p className="text-muted-foreground">A one-minute tour. You can skip it, and open it again any time from the miner.</p>
       </>
     ),
   },
@@ -111,54 +91,27 @@ export const STEPS = [
           Your <b>address</b> is like an account number. It&apos;s safe to share: it&apos;s where bitcoin is sent to you.
         </p>
         <p>
-          Your <b>12 words</b> are the key to the wallet. Whoever has them can spend what&apos;s in it, so write them down, keep them private and never share them.
-          They&apos;re made in your browser and never leave it.
+          Your <b>12 words</b> are the key. Whoever has them can spend your bitcoin, so keep them secret. They&apos;re made in your browser and never leave it.
         </p>
       </>
     ),
   },
   {
-    title: 'Payments are grouped into blocks',
-    art: (
-      <Art>
-        {[16, 82, 148].map((x) => (
-          <Block key={x} x={x} />
-        ))}
-        {[64, 130, 196].map((x) => (
-          <path key={x} {...LINE} d={`M${x} 52h18`} />
-        ))}
-        <rect className="fill-none stroke-primary" strokeWidth={2} strokeDasharray="5 4" x={214} y={28} width={48} height={48} rx={6} />
-        <text className="fill-primary font-display font-bold" x={238} y={61} textAnchor="middle" fontSize={24}>
-          ?
-        </text>
-      </Art>
-    ),
-    body: (
-      <>
-        <p>
-          About every 10 minutes, the newest payments are bundled into a <b>block</b> and added to the end of the record.
-        </p>
-        <p>
-          Each block is locked to the one before it, so the history can&apos;t be quietly rewritten. That chain of blocks is the <b>blockchain</b>.
-        </p>
-      </>
-    ),
-  },
-  {
-    title: 'Mining is a guessing game',
+    title: 'Blocks and the guessing game',
     guess: true,
     body: (
       <>
         <p>
-          To add the next block, computers race to solve a puzzle. There&apos;s no shortcut: they mix the block with a guess, look at the result (a <b>hash</b>), and
-          try again.
+          About every 10 minutes, new payments are packed into a <b>block</b>, linked to the one before it. That chain is the <b>blockchain</b>.
         </p>
-        <p>A winning hash starts with a long run of zeros, about 19 of them today. Try a few guesses yourself:</p>
+        <p>
+          To add the next block, computers race to find a <b>hash</b> that starts with about 19 zeros. There&apos;s no shortcut, only guessing. Try it:
+        </p>
       </>
     ),
   },
   {
-    title: 'The winner earns new bitcoin',
+    title: 'Why miners get paid',
     art: (
       <Art>
         <Block x={40} />
@@ -170,11 +123,8 @@ export const STEPS = [
     ),
     body: (
       <>
-        <p>A bank pays its staff to keep its books. Bitcoin has no staff, so it pays its miners instead, for adding each new block and keeping the record safe.</p>
-        <p>
-          The computer that finds a winning guess earns 3.125 brand-new bitcoin, plus the fees from the payments inside. That&apos;s the only way new bitcoin is ever
-          made. When more computers join, the network makes the puzzle harder, so a block still takes about 10 minutes.
-        </p>
+        <p>A bank pays its staff to keep its books. Bitcoin has no staff, so it pays its miners instead, for adding each new block.</p>
+        <p>The winner gets 3.125 new bitcoin, plus the fees from the payments inside. That&apos;s the only way new bitcoin is made.</p>
       </>
     ),
   },
@@ -194,36 +144,11 @@ export const STEPS = [
     body: (
       <>
         <p>
-          Press <b>Mine BTC</b> and your browser starts guessing. You&apos;ll see its speed in hashes per second, a live graph, and its <b>shares</b>: close calls that
-          show it&apos;s doing real work.
+          Press <b>Mine BTC</b> to start, and again to stop. You&apos;ll see your speed and your <b>shares</b>: close calls that show real work.
         </p>
-        <p>If your browser finds a block, your payout is sent to your wallet once the block is confirmed, about 100 blocks (around 17 hours) later.</p>
-        <p className="text-muted-foreground">
-          Mining uses your processor, so your device may warm up or use more battery: the Speed slider turns it down. It pauses while this tab is hidden, and you can
-          stop whenever you like.
-        </p>
+        <p>If you find a block, the payout goes to your address about 100 blocks (around 17 hours) later.</p>
+        <p className="text-muted-foreground">Mining can warm up your device: the Speed slider turns it down.</p>
       </>
-    ),
-  },
-  {
-    title: "You're ready",
-    art: (
-      <Art>
-        <circle className="fill-primary" cx={140} cy={52} r={40} />
-        <path className="fill-none stroke-primary-foreground" strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" d="M122 53l12 12 24-26" />
-        <Sparkle x={84} y={30} s={0.9} />
-        <Sparkle x={200} y={78} s={1.1} />
-        <Sparkle x={206} y={24} s={0.6} />
-      </Art>
-    ),
-    body: (
-      <ol className="list-decimal space-y-1.5 pl-5">
-        <li>Set up a wallet: create a new one, or bring your own.</li>
-        <li>
-          Press <b>Mine BTC</b> to start, and press it again to stop.
-        </li>
-        <li>Payouts go to your wallet&apos;s address.</li>
-      </ol>
     ),
   },
 ];
@@ -286,7 +211,6 @@ function GuessGame() {
           </p>
         </>
       )}
-      <p className="text-xs text-muted-foreground">The whole Bitcoin network makes about a billion trillion guesses every second.</p>
     </div>
   );
 }
@@ -318,7 +242,7 @@ export default function Tutorial({ step, onStep, onClose, finishLabel, Title = '
         )}
       </div>
       <div aria-live="polite">
-        <div key={step} ref={enter} className="flex min-h-[23rem] flex-col gap-3">
+        <div key={step} ref={enter} className="flex min-h-[20rem] flex-col gap-3">
           {s.art && (
             <div aria-hidden className="flex justify-center">
               {s.art}
@@ -342,7 +266,7 @@ export default function Tutorial({ step, onStep, onClose, finishLabel, Title = '
             </Button>
           )}
           <Button onClick={() => (last ? onClose(true) : onStep(step + 1))} data-testid="tutorial-next">
-            {step === 0 ? 'Start the tour' : last ? finishLabel : 'Next'}
+            {last ? finishLabel : 'Next'}
           </Button>
         </div>
       </div>
