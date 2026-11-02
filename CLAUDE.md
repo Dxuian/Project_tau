@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The top level holds only these; don't add top-level folders or files:
 - `tau-crypto/` (the library);
 - `server/` (everything deployed, with its tests and tooling);
-- `README.md`, `CLAUDE.md`, `docker-compose.yml` (server/'s containers) and `.gitignore`.
+- `README.md`, `CLAUDE.md`, `docker-compose.yml` (server/'s containers) and `.gitignore`;
+- `mine-btc-24-themes.html`: the owner's design prototype (one standalone page, never deployed or built). It has the 26 themes, the setup-first flow and the visitor's tutorial on how Bitcoin mining works, which opens on a first visit (`localStorage` `tau.tutorial`) and again from "See tutorial" on the miner. Its hashing is a demo that connects to nothing. It loads Google Fonts, which the site must never do.
 
 There is no upstream clone. `tau-crypto/dev vendor` fetches the pinned cpuminer-opt into the library's cache volume. There is no `.github/`: the alerts live in PostHog (GitHub's scheduled runs were hours apart).
 

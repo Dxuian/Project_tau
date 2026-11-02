@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mine BTC — 26 themes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=Barlow+Condensed:wght@500;700&family=Bebas+Neue&family=Chakra+Petch:wght@400;600&family=Courier+Prime:wght@400;700&family=DM+Serif+Display&family=IBM+Plex+Serif:wght@400;600&family=Orbitron:wght@500;700&family=Playfair+Display:wght@500;700&family=Press+Start+2P&family=Rubik:wght@400;500;700&family=Space+Mono:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+<style>
+:root{--page:#E7E5E0;--page-ink:#1B1B1B;--page-muted:#5A5A5A;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--page:#121316;--page-ink:#ECECEC;--page-muted:#9E9EA2;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--page-ink);font:16px/1.5 "Rubik",system-ui,sans-serif}
+.shell{max-width:1700px;margin:0 auto;padding:26px 18px 48px}
+.shell>header{margin-bottom:20px}
+.shell h1{margin:0 0 4px;font-size:1.55rem}
+.shell header p{margin:0;color:var(--page-muted);max-width:72ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px}
+body.focused .grid{grid-template-columns:1fr;max-width:940px;margin:0 auto}
+body.focused .app:not(.is-focus){display:none}
+
+/* ---------- shared structure (all themed via custom props) ---------- */
+.app{container-type:inline-size;position:relative;display:flex;flex-direction:column;min-height:560px;overflow:hidden;
+  background:var(--bg,#fff);color:var(--ink,#111);font-family:var(--font-body,inherit);
+  border:1px solid var(--line,#ccc);border-radius:var(--panel-radius,10px)}
+.app :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app-top{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);position:relative;z-index:3}
+.brand{display:flex;align-items:baseline;gap:8px;font-family:var(--font-display,inherit);font-size:var(--brand-size,1.1rem);line-height:1.1}
+.idx{font-size:.7rem;color:var(--muted);font-family:var(--font-mono,monospace)}
+.tabs{display:none;gap:4px;margin-left:auto}
+.app.ready .tabs{display:flex}
+.tabs button{font:inherit;font-size:var(--ui,.9rem);background:none;color:var(--muted);border:1px solid transparent;padding:4px 10px;border-radius:var(--radius,6px);cursor:pointer}
+.tabs button[aria-selected=true]{color:var(--ink);background:var(--surface);border-color:var(--line)}
+.focus-btn{font:inherit;margin-left:auto;background:none;color:var(--muted);border:1px solid var(--line);padding:4px 9px;border-radius:var(--radius,6px);cursor:pointer}
+.app.ready .focus-btn{margin-left:8px}
+.page{flex:1;display:flex;flex-direction:column;gap:16px;padding:18px 18px 20px;position:relative;z-index:2}
+.page[hidden]{display:none}
+h3{margin:0 0 2px;font-family:var(--font-display,inherit);font-size:var(--h3,1.02rem);font-weight:600}
+.hint{color:var(--muted);font-size:var(--small,.86rem)}
+.warn{color:var(--accent);font-size:var(--small,.86rem);font-weight:600}
+.err{color:var(--err,var(--accent));font-size:var(--small,.84rem);min-height:1.1em;margin:0}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font:inherit;font-size:var(--ui,.9rem);font-weight:600;cursor:pointer;
+  background:var(--accent);color:var(--accent-ink);border:1px solid var(--accent);border-radius:var(--radius,6px);padding:8px 14px;white-space:nowrap}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn[hidden]{display:none}
+.btn-ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+input[type=text],select{font:inherit;font-size:var(--ui,.9rem);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius,6px);padding:7px 10px;min-width:0}
+
+/* onboarding gate */
+.gate-cards{display:grid;gap:12px}
+.gc{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius,6px);padding:14px;display:flex;flex-direction:column;gap:8px}
+.gc .btn,.gc .btn-ghost{align-self:flex-start;margin-top:4px}
+
+/* recovery phrase */
+.words{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;counter-reset:w}
+@container (max-width:480px){.words{grid-template-columns:repeat(2,1fr)}}
+.words li{counter-increment:w;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius,6px);padding:8px 10px;font-family:var(--font-mono,monospace);font-size:var(--small,.9rem)}
+.words li::before{content:counter(w);color:var(--muted);margin-right:7px;font-size:.78em}
+.confirm{display:flex;align-items:center;gap:8px;font-size:var(--small,.88rem)}
+
+/* mine */
+.rig{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center}
+@container (max-width:520px){.rig{grid-template-columns:1fr;justify-items:center}.stats{width:100%}}
+.mine-btn{position:relative;width:166px;height:166px;border-radius:50%;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  font-family:var(--font-display,inherit);color:var(--ink);background:var(--surface);border:2px solid var(--line)}
+.app.is-running .mine-btn{border-color:var(--accent);box-shadow:0 0 0 5px color-mix(in srgb,var(--accent) 24%,transparent)}
+.mine-label{font-size:var(--mine,1.3rem);font-weight:700;text-align:center;line-height:1.1}
+.mine-sub{font-size:var(--small,.84rem);opacity:.85}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0}
+.stats div{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius,6px);padding:9px 11px}
+.stats dt{color:var(--muted);font-size:var(--small,.8rem)}
+.stats dd{margin:2px 0 0;font-family:var(--font-num,var(--font-display),monospace);font-size:var(--num,1.3rem);font-variant-numeric:tabular-nums}
+.app.share .s-shares{color:var(--accent)}
+.hashline code,.tour-hash{display:block;margin-top:5px;padding:9px 11px;font-family:var(--font-mono,monospace);font-size:var(--mono,.8rem);word-break:break-all;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius,6px)}
+.hashline .z,.tour-hash .z{color:var(--zero,var(--accent));font-weight:700}
+.payout{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.payout select{flex:1}
+
+/* wallet list */
+.w-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.w-list li{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;border:1px solid var(--line);border-radius:var(--radius,6px);padding:9px 11px}
+.w-list li.is-payout{border-color:var(--accent)}
+.w-list li.empty{display:block;border-style:dashed;color:var(--muted)}
+.w-list code{grid-column:1;font-family:var(--font-mono,monospace);font-size:var(--mono,.78rem);color:var(--muted);word-break:break-all}
+.w-list .src{color:var(--muted);font-size:var(--small,.78rem);font-weight:400}
+.w-list .use{grid-row:1/3;grid-column:2}
+.reveal-box{background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius,6px);padding:10px;font-family:var(--font-mono,monospace);font-size:var(--small,.82rem);word-spacing:3px}
+
+/* activity */
+.log{list-style:none;margin:0;padding:0}
+.log li{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:var(--ui,.9rem)}
+.log li.empty{border:1px dashed var(--line);border-radius:var(--radius,6px);padding:10px}
+.log time{font-family:var(--font-mono,monospace);color:var(--muted);font-size:var(--mono,.78rem)}
+
+/* tutorial: how Bitcoin mining works (first visit, then "See tutorial" on the miner) */
+.tour-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tour-top .btn{padding:4px 10px}
+.tour-step{display:flex;flex-direction:column;gap:10px}
+.tour-art{display:flex;justify-content:center;align-items:center;min-height:104px;color:var(--accent)}
+.tour-art svg{width:100%;max-width:280px;height:104px;overflow:visible}
+.tour-art .ln{fill:none;stroke:var(--muted);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tour-art .nd{fill:var(--surface);stroke:var(--ink);stroke-width:2}
+.tour-art .ac{fill:var(--accent)}
+.tour-art .ai{fill:var(--accent-ink);font-family:var(--font-display,inherit);font-weight:700}
+.tour-art .rg{fill:none;stroke:var(--accent-ink);stroke-width:2;opacity:.35}
+.tour-art .dash{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:5 4}
+.tour-title{font-size:calc(var(--h3,1.02rem) * 1.3);line-height:1.25}
+.tour-body p{margin:0 0 8px;line-height:1.55}
+.tour-body p:last-child{margin-bottom:0}
+.tour-body ol{margin:0;padding-left:1.3em;display:grid;gap:6px;line-height:1.45}
+.tour-chips{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:340px}
+.tour-chips div{display:grid;justify-items:center;gap:2px;padding:12px 8px;text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius,6px)}
+.tour-chips svg{width:26px;height:26px;fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tour-chips b{color:var(--ink);font-family:var(--font-display,inherit);font-size:var(--h3,1rem)}
+.tour-chips span{color:var(--muted);font-size:var(--small,.84rem)}
+.tour-guess{display:flex;flex-direction:column;gap:8px}
+.tour-guess[hidden]{display:none}
+.tour-guess p{margin:0}
+.tour-best{font-size:var(--small,.9rem);font-weight:600}
+.tour-best:empty{display:none}
+.tour-art[hidden]{display:none}
+.tour-art .ft{font-family:var(--font-display,inherit);font-weight:700}
+.tour-art .ck{fill:none;stroke:var(--accent-ink);stroke-width:7;stroke-linecap:round;stroke-linejoin:round}
+.tour-nav{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.tour-dots{display:flex;gap:6px}
+.tour-dots i{width:7px;height:7px;border-radius:4px;background:var(--line);transition:width .2s,background .2s}
+.tour-dots i.on{width:18px;background:var(--accent)}
+.tour-cta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px}
+.tour-cta .q{display:inline-grid;place-items:center;width:1.25em;height:1.25em;border-radius:50%;border:1.5px solid currentColor;font-size:.8em;line-height:1}
+.shell .reset{font:inherit;font-size:.86rem;background:none;border:none;padding:0;margin-top:6px;color:var(--page-muted);text-decoration:underline;cursor:pointer}
+
+/* =================== 20 THEMES =================== */
+/* 1 Ledger */
+[data-theme=ledger]{--bg:#EDF2E8;--surface:#F7FAF3;--ink:#1F3A5F;--muted:#55697E;--accent:#A93434;--accent-ink:#fff;--line:#BACBBB;--radius:2px;--panel-radius:3px;
+  --font-display:"IBM Plex Serif",serif;--font-body:"IBM Plex Serif",serif;--font-mono:"Courier Prime",monospace;--font-num:"Courier Prime",monospace;
+  background-image:repeating-linear-gradient(to bottom,transparent 0 30px,#D7E3D7 30px 31px)}
+[data-theme=ledger] .mine-btn{width:180px;height:116px;border-radius:6px;background:transparent;color:var(--accent);border:4px double var(--accent);transform:rotate(-3deg);font-family:"Courier Prime",monospace;letter-spacing:.05em}
+[data-theme=ledger].is-running .mine-btn{background:var(--accent);color:#fff;transform:rotate(1deg)}
+/* 2 Vault */
+[data-theme=vault]{--bg:#25292D;--surface:#30353A;--ink:#ECE6D8;--muted:#A0A7AE;--accent:#C9A14A;--accent-ink:#1F1A0E;--line:#434A51;--radius:4px;--panel-radius:8px;--brand-size:1.35rem;--num:1.5rem;
+  --font-display:"Barlow Condensed",sans-serif;--font-body:"Barlow",sans-serif;--font-mono:ui-monospace,monospace}
+[data-theme=vault] .mine-btn{border:7px solid #191C1F;color:var(--accent);background:radial-gradient(circle,#3A4046 0 58%,transparent 59%),repeating-conic-gradient(var(--accent) 0 1.5deg,#2A2E33 1.5deg 12deg);box-shadow:inset 0 0 0 2px #4C535A}
+[data-theme=vault].is-running .mine-btn{box-shadow:inset 0 0 0 2px var(--accent),0 0 26px rgba(201,161,74,.45)}
+/* 3 Arcade */
+[data-theme=arcade]{--bg:#24104F;--surface:#341A6E;--ink:#FFF4DA;--muted:#C2B2EE;--accent:#FFD23F;--accent-ink:#24104F;--line:#55339E;--zero:#FF6FAE;--err:#FF6FAE;--radius:0;--panel-radius:0;
+  --font-display:"Press Start 2P",monospace;--font-body:"VT323",monospace;--font-mono:"VT323",monospace;--font-num:"VT323",monospace;
+  --brand-size:.72rem;--h3:.66rem;--ui:1.15rem;--small:1.02rem;--mono:1.08rem;--num:1.9rem;--mine:.78rem;font-size:1.1rem}
+[data-theme=arcade] .mine-btn{background:var(--accent);color:var(--accent-ink);border:4px solid #1A0B3A;box-shadow:0 8px 0 #B08A16;line-height:1.5}
+[data-theme=arcade] .mine-btn:active{transform:translateY(5px);box-shadow:0 3px 0 #B08A16}
+[data-theme=arcade].is-running .mine-btn{background:#FF6FAE;box-shadow:0 8px 0 #A83D6E}
+[data-theme=arcade]::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:4;background:repeating-linear-gradient(to bottom,rgba(0,0,0,.15) 0 2px,transparent 2px 4px)}
+/* 4 Blueprint */
+[data-theme=blueprint]{--bg:#133F7D;--surface:rgba(255,255,255,.07);--ink:#F2F7FF;--muted:#AFC7EA;--accent:#fff;--accent-ink:#133F7D;--line:rgba(255,255,255,.34);--zero:#8FE6FF;--err:#FFC7A8;--radius:0;--panel-radius:2px;
+  --font-display:"Chakra Petch",sans-serif;--font-body:"Chakra Petch",sans-serif;--font-mono:ui-monospace,monospace;
+  background-image:linear-gradient(rgba(255,255,255,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.08) 1px,transparent 1px);background-size:22px 22px}
+[data-theme=blueprint] .mine-btn{background:transparent;border:2px solid var(--ink)}
+[data-theme=blueprint] .mine-btn::before{content:"";position:absolute;inset:-13px;border-radius:50%;border:1px dashed var(--line)}
+[data-theme=blueprint].is-running .mine-btn{background:rgba(143,230,255,.12);border-color:#8FE6FF}
+/* 5 Terminal */
+[data-theme=terminal]{--bg:#0A0F0A;--surface:#0F170F;--ink:#4AF07A;--muted:#2E8F4E;--accent:#4AF07A;--accent-ink:#04140A;--line:#1C3A24;--radius:0;--panel-radius:4px;
+  --font-display:"Space Mono",monospace;--font-body:"Space Mono",monospace;--font-mono:"Space Mono",monospace;
+  background-image:repeating-linear-gradient(to bottom,rgba(74,240,122,.04) 0 2px,transparent 2px 4px)}
+[data-theme=terminal] .mine-btn{border-radius:0;background:transparent;border:1px solid var(--accent)}
+[data-theme=terminal].is-running .mine-btn{background:rgba(74,240,122,.1)}
+/* 6 Neon */
+[data-theme=neon]{--bg:#140B2B;--surface:#1E1142;--ink:#F5E9FF;--muted:#B79BE6;--accent:#FF2E97;--accent-ink:#140B2B;--line:#3A2168;--zero:#29E0FF;--radius:6px;--panel-radius:10px;
+  --font-display:"Orbitron",sans-serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace;
+  background-image:radial-gradient(circle at 50% -10%,rgba(255,46,151,.2),transparent 60%)}
+[data-theme=neon] .mine-btn{background:transparent;border:2px solid var(--accent);color:var(--accent);text-shadow:0 0 8px var(--accent)}
+[data-theme=neon].is-running .mine-btn{box-shadow:0 0 22px var(--accent),inset 0 0 22px rgba(255,46,151,.3)}
+/* 7 Swiss */
+[data-theme=swiss]{--bg:#F2F2F0;--surface:#fff;--ink:#111;--muted:#6A6A6A;--accent:#E4002B;--accent-ink:#fff;--line:#DAD9D5;--radius:4px;--panel-radius:6px;
+  --font-display:"Rubik",sans-serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace}
+[data-theme=swiss] .mine-btn{border-radius:999px}
+/* 8 Gold */
+[data-theme=gold]{--bg:#0C0C0E;--surface:#16161A;--ink:#EDE3C8;--muted:#938A74;--accent:#D4AF37;--accent-ink:#0C0C0E;--line:#2A2822;--radius:3px;--panel-radius:4px;--brand-size:1.3rem;
+  --font-display:"Playfair Display",serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace}
+[data-theme=gold] .mine-btn{background:transparent;border:1px solid var(--accent);color:var(--accent)}
+[data-theme=gold].is-running .mine-btn{box-shadow:0 0 0 1px var(--accent),0 0 24px rgba(212,175,55,.35)}
+/* 9 Comic */
+[data-theme=comic]{--bg:#FFF6DB;--surface:#fff;--ink:#141414;--muted:#5A5A5A;--accent:#E8392B;--accent-ink:#fff;--line:#141414;--radius:6px;--panel-radius:8px;--brand-size:1.5rem;--mine:1.5rem;
+  --font-display:"Bebas Neue",sans-serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace;
+  background-image:radial-gradient(#F4D35E 1.3px,transparent 1.6px);background-size:14px 14px}
+[data-theme=comic] .app-top,[data-theme=comic] .gc,[data-theme=comic] .stats div,[data-theme=comic] .mine-btn{border-width:2px}
+[data-theme=comic] .mine-btn{background:var(--accent);color:#fff;border:3px solid #141414;box-shadow:5px 5px 0 #141414}
+[data-theme=comic] .mine-btn:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #141414}
+/* 10 Forest */
+[data-theme=forest]{--bg:#F1EFE3;--surface:#FBF9F0;--ink:#233524;--muted:#5C6B52;--accent:#3E7C47;--accent-ink:#fff;--line:#CFD3BE;--radius:14px;--panel-radius:16px;
+  --font-display:"DM Serif Display",serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace}
+[data-theme=forest] .mine-btn{border-radius:46% 54% 52% 48%/54% 46% 54% 46%}
+/* 11 Brutal */
+[data-theme=brutal]{--bg:#fff;--surface:#fff;--ink:#000;--muted:#444;--accent:#1F4BFF;--accent-ink:#fff;--line:#000;--radius:0;--panel-radius:0;--brand-size:1.25rem;
+  --font-display:"Space Mono",monospace;--font-body:"Space Mono",monospace;--font-mono:"Space Mono",monospace}
+[data-theme=brutal] .app{border-width:2px}
+[data-theme=brutal] .mine-btn{border-radius:0;border-width:3px;box-shadow:6px 6px 0 #000}
+[data-theme=brutal].is-running .mine-btn{background:var(--accent);color:#fff;box-shadow:6px 6px 0 var(--accent)}
+/* 12 Sunset */
+[data-theme=sunset]{--bg:#2A1636;--surface:rgba(255,255,255,.08);--ink:#FFF0E8;--muted:#E6B9C9;--accent:#FF8A5B;--accent-ink:#2A1636;--line:rgba(255,255,255,.22);--radius:12px;--panel-radius:14px;
+  --font-display:"Rubik",sans-serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace;
+  background-image:linear-gradient(160deg,#3A1C4A 0%,#7A2E52 45%,#C9553F 100%)}
+[data-theme=sunset] .mine-btn{background:linear-gradient(145deg,#FFB36B,#FF6B9E);color:#2A1636;border:none}
+/* 13 Ocean */
+[data-theme=ocean]{--bg:#06283D;--surface:#0C3A54;--ink:#DFF6FF;--muted:#7FB8CE;--accent:#35C4D6;--accent-ink:#04202E;--line:#17506A;--radius:10px;--panel-radius:12px;
+  --font-display:"Barlow",sans-serif;--font-body:"Barlow",sans-serif;--font-mono:ui-monospace,monospace;
+  background-image:radial-gradient(circle at 80% 120%,rgba(53,196,214,.18),transparent 55%)}
+[data-theme=ocean] .mine-btn{background:radial-gradient(circle at 50% 30%,#0E4A68,#0C3A54);border:2px solid var(--accent)}
+/* 14 Candy */
+[data-theme=candy]{--bg:#FFE9F3;--surface:#fff;--ink:#5A2A46;--muted:#B07093;--accent:#FF5FA2;--accent-ink:#fff;--line:#FFC2DC;--radius:18px;--panel-radius:20px;
+  --font-display:"Rubik",sans-serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace;
+  background-image:radial-gradient(#FFD0E4 2px,transparent 2px);background-size:18px 18px}
+[data-theme=candy] .mine-btn{background:linear-gradient(145deg,#FF8AC0,#FF5FA2);color:#fff;border:3px solid #fff;box-shadow:0 6px 16px rgba(255,95,162,.4)}
+/* 15 Copper */
+[data-theme=copper]{--bg:#1E1712;--surface:#2A2017;--ink:#F0DFC4;--muted:#A68B6A;--accent:#C77B3B;--accent-ink:#1A120B;--line:#4A382A;--radius:4px;--panel-radius:6px;--brand-size:1.3rem;
+  --font-display:"Playfair Display",serif;--font-body:"Barlow",sans-serif;--font-mono:ui-monospace,monospace}
+[data-theme=copper] .mine-btn{border:6px solid #3A2A1C;color:var(--accent);background:radial-gradient(circle,#36291C 0 56%,transparent 57%),repeating-conic-gradient(#C77B3B 0 2deg,#4A382A 2deg 14deg)}
+[data-theme=copper].is-running .mine-btn{box-shadow:0 0 22px rgba(199,123,59,.4)}
+/* 16 Frost */
+[data-theme=frost]{--bg:#EAF4FA;--surface:#fff;--ink:#1B3A4B;--muted:#5E7E8E;--accent:#2DA8D8;--accent-ink:#fff;--line:#C7DEEA;--radius:8px;--panel-radius:10px;
+  --font-display:"Chakra Petch",sans-serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace}
+[data-theme=frost] .mine-btn{background:linear-gradient(160deg,#fff,#DCEFF8);border:2px solid var(--accent)}
+[data-theme=frost].is-running .mine-btn{box-shadow:0 0 0 5px rgba(45,168,216,.2),0 0 18px rgba(45,168,216,.3)}
+/* 17 Volcano */
+[data-theme=volcano]{--bg:#140A08;--surface:#221210;--ink:#FFE9D6;--muted:#B38A74;--accent:#FF5A1F;--accent-ink:#140A08;--line:#3A221A;--zero:#FFC24B;--radius:6px;--panel-radius:8px;
+  --font-display:"Orbitron",sans-serif;--font-body:"Barlow",sans-serif;--font-mono:ui-monospace,monospace;
+  background-image:radial-gradient(circle at 50% 130%,rgba(255,90,31,.28),transparent 55%)}
+[data-theme=volcano] .mine-btn{background:radial-gradient(circle at 50% 70%,#FF5A1F,#7A1E06 70%);color:#fff;border:2px solid #FF8A4B}
+[data-theme=volcano].is-running .mine-btn{box-shadow:0 0 26px rgba(255,90,31,.6)}
+/* 18 Royal */
+[data-theme=royal]{--bg:#1A0F2E;--surface:#261646;--ink:#F3E9FF;--muted:#B49AD6;--accent:#CBA135;--accent-ink:#1A0F2E;--line:#3C2A5E;--radius:3px;--panel-radius:5px;--brand-size:1.3rem;
+  --font-display:"Playfair Display",serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace}
+[data-theme=royal] .mine-btn{background:transparent;border:2px solid var(--accent);color:var(--accent)}
+[data-theme=royal].is-running .mine-btn{box-shadow:0 0 0 1px var(--accent),0 0 24px rgba(203,161,53,.4)}
+/* 19 Mint */
+[data-theme=mint]{--bg:#ECF7F1;--surface:#fff;--ink:#16352A;--muted:#5B7A6D;--accent:#15B87B;--accent-ink:#fff;--line:#C6E4D6;--radius:10px;--panel-radius:12px;
+  --font-display:"Rubik",sans-serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace}
+[data-theme=mint] .mine-btn{border-radius:999px;background:#fff;border:2px solid var(--accent)}
+/* 20 Cyber */
+[data-theme=cyber]{--bg:#0A0E14;--surface:#121823;--ink:#D6F7FF;--muted:#6FA0B0;--accent:#00E5FF;--accent-ink:#06141A;--line:#1E3340;--zero:#FF2BD6;--radius:0;--panel-radius:2px;
+  --font-display:"Orbitron",sans-serif;--font-body:"Space Mono",monospace;--font-mono:"Space Mono",monospace;
+  background-image:linear-gradient(rgba(0,229,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,.05) 1px,transparent 1px);background-size:26px 26px}
+[data-theme=cyber] .mine-btn{border-radius:0;clip-path:polygon(22% 0,100% 0,100% 78%,78% 100%,0 100%,0 22%);background:transparent;border:2px solid var(--accent);color:var(--accent)}
+[data-theme=cyber].is-running .mine-btn{box-shadow:0 0 20px rgba(0,229,255,.5);background:rgba(0,229,255,.08)}
+
+/* =================== LOTTERY + CASINO EXTRAS =================== */
+.mine-btn>span{position:relative;z-index:2}
+.banner{position:relative;z-index:3;padding:6px 16px;font-size:var(--small,.84rem);font-weight:600;white-space:nowrap;overflow:hidden;border-bottom:1px solid var(--line)}
+.banner.scroll span{display:inline-block;padding-left:100%;animation:ticker 16s linear infinite}
+.marquee{position:absolute;inset:4px;z-index:6;pointer-events:none;
+  --b:radial-gradient(circle,#FFF1B8 0 2.6px,rgba(255,241,184,.25) 3.2px,transparent 4.5px);
+  background:var(--b) 0 0/16px 10px repeat-x,var(--b) 0 100%/16px 10px repeat-x,var(--b) 0 0/10px 16px repeat-y,var(--b) 100% 0/10px 16px repeat-y;
+  animation:bulbs .7s steps(2) infinite}
+.app.has-marquee .app-top{padding:20px 22px 12px}
+.app.has-marquee .page{padding:18px 22px 24px}
+.art{display:block;width:100%;max-width:340px;height:auto;margin:4px auto 0}
+.reels{position:relative;display:flex;justify-content:center;gap:8px;align-self:center;padding:12px 14px;border-radius:12px;
+  background:linear-gradient(#3A2508,#140C02);border:2px solid var(--accent);box-shadow:inset 0 0 18px rgba(0,0,0,.6)}
+.reel{width:62px;height:54px;overflow:hidden;border-radius:6px;background:linear-gradient(#cfcfcf,#fff 30%,#fff 70%,#cfcfcf)}
+.strip{display:flex;flex-direction:column}
+.strip span{height:54px;flex:none;display:flex;align-items:center;justify-content:center;font:700 30px/1 "Playfair Display",serif;color:#C8102E}
+.app.is-running .strip{animation:reel .6s linear infinite}
+.app.jackpot-on .strip{animation:none}
+.jackpot{position:absolute;left:50%;top:-15px;transform:translateX(-50%);padding:3px 14px;border-radius:999px;white-space:nowrap;
+  font:700 .9rem var(--font-display);background:var(--accent);color:var(--accent-ink);opacity:0;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.app.jackpot-on .jackpot{animation:jp 1.5s ease-out forwards}
+.ball-wrap{display:flex;flex-direction:column;align-items:center;gap:8px}
+.balls{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}
+.balls span{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font:700 .95rem "Rubik",sans-serif;color:#2B2340;
+  background:radial-gradient(circle,#fff 0 12px,transparent 12.5px),radial-gradient(circle at 35% 28%,#fff8,var(--ball) 55%,#0006);background-color:var(--ball);box-shadow:0 3px 8px rgba(0,0,0,.18)}
+.balls span:nth-child(1){--ball:#D61F2C}.balls span:nth-child(2){--ball:#F6A21A}.balls span:nth-child(3){--ball:#2A9D4B}
+.balls span:nth-child(4){--ball:#1F6FD6}.balls span:nth-child(5){--ball:#8E3CCB}.balls span:nth-child(6){--ball:#E8478B}
+.balls span.pop{animation:pop .35s ease-out}
+.rain{position:absolute;inset:0;z-index:7;pointer-events:none;overflow:hidden}
+.rain i{position:absolute;top:-40px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font:700 17px/1 sans-serif;font-style:normal;color:#7A4A00;
+  background:radial-gradient(circle at 35% 30%,#FFF1A8,#F7B21A 55%,#B87400);box-shadow:inset 0 0 0 2px #B87400;animation:fall linear forwards}
+
+/* 21 Lottery */
+[data-theme=lottery]{--bg:#F2F6E1;--surface:#fff;--ink:#2B2340;--muted:#6B6585;--accent:#D61F2C;--accent-ink:#fff;--line:#D5DABF;--radius:6px;--panel-radius:6px;--brand-size:1.55rem;--mine:1.1rem;--num:1.75rem;
+  --font-display:"Bebas Neue",sans-serif;--font-body:"Rubik",sans-serif;--font-mono:"Space Mono",monospace;--font-num:"Bebas Neue",sans-serif;
+  background-image:repeating-radial-gradient(circle at 0 0,transparent 0 14px,rgba(214,31,44,.05) 14px 15px),repeating-radial-gradient(circle at 100% 100%,transparent 0 14px,rgba(43,35,64,.05) 14px 15px)}
+[data-theme=lottery]::before{content:"";position:absolute;top:0;bottom:0;left:0;width:12px;z-index:4;background:radial-gradient(circle at 0 50%,var(--page) 0 5px,transparent 5.5px) 0 0/12px 16px repeat-y}
+[data-theme=lottery] .mine-btn{border:none;color:#2B2340;background:radial-gradient(circle at 35% 28%,#FF8C8C,#D61F2C 55%,#7E0E17);box-shadow:0 10px 18px rgba(126,14,23,.3)}
+[data-theme=lottery] .mine-btn::before{content:"";position:absolute;inset:24%;border-radius:50%;background:#fff;z-index:1}
+[data-theme=lottery].is-running .mine-btn{animation:wobble 1.2s ease-in-out infinite;box-shadow:0 10px 24px rgba(214,31,44,.45)}
+
+/* 22 Grand Casino (fancy, art + animation) */
+[data-theme=royale]{--bg:#0E4D2E;--surface:rgba(0,0,0,.24);--ink:#F6EED7;--muted:#BCD2C0;--accent:#E2B54A;--accent-ink:#1B1306;--line:rgba(226,181,74,.38);--radius:8px;--panel-radius:14px;--brand-size:1.3rem;--mine:1rem;
+  --font-display:"Playfair Display",serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace;
+  background-image:radial-gradient(ellipse at 50% 35%,#17703F,#0B3A23 78%);border:2px solid #B8913A}
+[data-theme=royale] .mine-btn{border:5px solid #B8913A;color:#F6EED7;background:#111;overflow:hidden}
+[data-theme=royale] .mine-btn::before{content:"";position:absolute;inset:0;border-radius:50%;z-index:0;background:repeating-conic-gradient(#C8102E 0 10deg,#151515 10deg 20deg)}
+[data-theme=royale] .mine-btn::after{content:"";position:absolute;inset:23%;border-radius:50%;z-index:1;background:radial-gradient(circle,#2B1F0C,#0E0B05);box-shadow:0 0 0 3px #E2B54A}
+[data-theme=royale].is-running .mine-btn::before{animation:spin 2.4s linear infinite}
+[data-theme=royale] .art,[data-theme=deluxe] .art{animation:float 4s ease-in-out infinite}
+
+/* 23 Bitcoin Casino (casino look, clearly BTC, calm) */
+[data-theme=casinobtc]{--bg:#1A0B0B;--surface:#2A1212;--ink:#FFEFD9;--muted:#C49A87;--accent:#F7931A;--accent-ink:#1A0B0B;--line:#4A2622;--radius:6px;--panel-radius:10px;--brand-size:1.6rem;--mine:2.6rem;--num:1.75rem;
+  --font-display:"Bebas Neue",sans-serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace;--font-num:"Bebas Neue",sans-serif;
+  background-image:repeating-linear-gradient(135deg,rgba(247,147,26,.045) 0 14px,transparent 14px 28px)}
+[data-theme=casinobtc] .banner{background:#F7931A;color:#1A0B0B;border-color:#F7931A}
+[data-theme=casinobtc] .mine-btn{border:none;color:#1A0B0B;background:radial-gradient(circle,#FFF4E3 0 46%,#F7931A 46.5% 50%,transparent 50.5%),repeating-conic-gradient(#C8102E 0 15deg,#FFF4E3 15deg 30deg);
+  box-shadow:0 0 0 6px #7A0A14,0 8px 20px rgba(0,0,0,.5)}
+[data-theme=casinobtc].is-running .mine-btn{box-shadow:0 0 0 6px #7A0A14,0 0 28px rgba(247,147,26,.6)}
+
+/* 24 Deluxe ₿ Casino (fancy, animated, clearly BTC) */
+[data-theme=deluxe]{--bg:#190A2E;--surface:rgba(255,255,255,.07);--ink:#FFF3D6;--muted:#C9B3EA;--accent:#FFC93C;--accent-ink:#2A1300;--line:rgba(255,201,60,.32);--zero:#F7931A;--radius:10px;--panel-radius:16px;--brand-size:1.3rem;--mine:2.8rem;
+  --font-display:"Playfair Display",serif;--font-body:"Rubik",sans-serif;--font-mono:ui-monospace,monospace;
+  background-image:radial-gradient(circle at 15% 0,rgba(255,64,160,.28),transparent 45%),radial-gradient(circle at 88% 8%,rgba(120,80,255,.32),transparent 45%),
+    repeating-conic-gradient(from 0deg at 50% -20%,rgba(255,201,60,.05) 0 6deg,transparent 6deg 12deg);border:2px solid #C99A2E}
+[data-theme=deluxe] .banner{background:linear-gradient(90deg,#C99A2E,#FFE08A,#C99A2E);color:#2A1300;border-color:#C99A2E}
+[data-theme=deluxe] .mine-btn{border:none;color:#7A4A00;background:radial-gradient(circle at 35% 30%,#FFF4B0,#FFC93C 45%,#C98A0A 75%);overflow:visible}
+[data-theme=deluxe] .mine-btn::before{content:"";position:absolute;inset:-9px;border-radius:50%;z-index:0;background:repeating-conic-gradient(#FFE08A 0 6deg,#B8860B 6deg 12deg);
+  -webkit-mask:radial-gradient(closest-side,transparent calc(100% - 9px),#000 calc(100% - 8px));mask:radial-gradient(closest-side,transparent calc(100% - 9px),#000 calc(100% - 8px))}
+[data-theme=deluxe] .mine-btn::after{content:"";position:absolute;inset:0;border-radius:50%;z-index:1;background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.6) 50%,transparent 65%) -180px 0/200% 100% no-repeat}
+[data-theme=deluxe].is-running .mine-btn::before{animation:spin 3s linear infinite}
+[data-theme=deluxe].is-running .mine-btn::after{animation:glint 1.6s ease-in-out infinite}
+[data-theme=deluxe].is-running .mine-btn{box-shadow:0 0 30px rgba(255,201,60,.55)}
+[data-theme=deluxe] .strip span{color:#B8600A}
+
+/* 25 Tau + 26 Tau Light (the site's original look: glass cards over a faint grid and drifting glows) */
+[data-theme=tau]{--bg:#0D0D15;--surface:rgba(28,28,42,.62);--ink:#F4F4F8;--muted:#A2A2B8;--accent:#F8A826;--accent-ink:#201505;--line:rgba(255,255,255,.085);--zero:#FBBF24;--err:#F0595E;--radius:12px;--panel-radius:20px;
+  --grid:rgba(244,244,248,.05);--glow-a:rgba(248,168,38,.2);--glow-b:rgba(251,191,36,.14)}
+[data-theme=tau-light]{--bg:#FAF8F4;--surface:rgba(255,255,255,.74);--ink:#221C16;--muted:#6E655B;--accent:#EC8A10;--accent-ink:#FFFAF2;--line:rgba(34,28,22,.11);--zero:#F59E0B;--err:#D93B3B;--radius:12px;--panel-radius:20px;
+  --grid:rgba(34,28,22,.05);--glow-a:rgba(236,138,16,.2);--glow-b:rgba(245,158,11,.14)}
+[data-theme^=tau]{--font-display:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--font-body:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--font-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  background-image:radial-gradient(circle at 8% -6%,var(--glow-a),transparent 42%),radial-gradient(circle at 96% 38%,var(--glow-b),transparent 40%)}
+[data-theme^=tau]::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;background-size:44px 44px;
+  background-image:linear-gradient(to right,var(--grid) 1px,transparent 1px),linear-gradient(to bottom,var(--grid) 1px,transparent 1px);
+  -webkit-mask-image:radial-gradient(ellipse 80% 70% at 50% 0%,#000 30%,transparent 80%);mask-image:radial-gradient(ellipse 80% 70% at 50% 0%,#000 30%,transparent 80%)}
+[data-theme^=tau] .gc,[data-theme^=tau] .stats div,[data-theme^=tau] .hashline code,[data-theme^=tau] .words li{-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px)}
+[data-theme^=tau] .gc{border-radius:var(--panel-radius)}
+[data-theme^=tau] .mine-btn{border:none;color:#1D1305;background:linear-gradient(145deg,#FCD34D,#F7931A);box-shadow:0 14px 40px -14px rgba(247,147,26,.75)}
+[data-theme^=tau].is-running .mine-btn{background:linear-gradient(145deg,#FDE68A,#FB923C);box-shadow:0 0 0 6px rgba(247,147,26,.22),0 0 46px rgba(247,147,26,.45)}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes ticker{to{transform:translateX(-100%)}}
+@keyframes bulbs{50%{background-position:8px 0,8px 100%,0 8px,100% 8px}}
+@keyframes reel{to{transform:translateY(-50%)}}
+@keyframes jp{0%{opacity:0;transform:translateX(-50%) scale(.6)}15%{opacity:1;transform:translateX(-50%) scale(1.08)}75%{opacity:1;transform:translateX(-50%) scale(1)}100%{opacity:0;transform:translateX(-50%)}}
+@keyframes pop{from{transform:scale(.55)}}
+@keyframes fall{to{transform:translateY(900px) rotate(540deg)}}
+@keyframes wobble{25%{transform:rotate(-8deg)}75%{transform:rotate(8deg)}}
+@keyframes float{50%{transform:translateY(-5px)}}
+@keyframes glint{to{background-position:180px 0}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.app.jackpot-on .jackpot{opacity:1}.banner.scroll span{padding-left:0}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <h1>Mine BTC — 26 themes, one screen</h1>
+    <p>Each panel is its own app. On a first visit it opens with a short tutorial on how Bitcoin mining works; this browser remembers once it's been seen, and "See tutorial" on the miner opens it again. Then it asks you to set up a wallet: create a new 12-word phrase (copy or download it) or upload a wallet / address. Then you can start and stop mining. Hashing runs in your browser as a demo and isn't connected to any pool. Tap ⤢ to open any panel full size.</p>
+    <button class="reset" type="button" id="reset-tour">Reset the tutorial and reload</button>
+  </header>
+  <main class="grid" id="grid"></main>
+</div>
+
+<template id="tpl">
+<section class="app">
+  <div class="app-top">
+    <div class="brand"><b></b><span class="idx"></span></div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="mine" aria-selected="true">Mine</button>
+      <button role="tab" data-tab="wallet" aria-selected="false">Wallet</button>
+      <button role="tab" data-tab="log" aria-selected="false">Activity</button>
+    </nav>
+    <button class="focus-btn" aria-label="Open full size">⤢</button>
+  </div>
+
+  <!-- tutorial: first visit only (remembered in localStorage), reopened from the miner -->
+  <div class="page" data-page="tour" hidden>
+    <div class="tour-top"><span class="hint tour-count"></span><button class="btn btn-ghost tour-skip">Skip</button></div>
+    <div class="tour-step" aria-live="polite">
+      <div class="tour-art" aria-hidden="true"></div>
+      <h3 class="tour-title"></h3>
+      <div class="tour-body"></div>
+    </div>
+    <div class="tour-guess" hidden>
+      <code class="tour-hash">Press Guess to try your luck.</code>
+      <div class="row"><button class="btn tg-one">Guess</button><button class="btn btn-ghost tg-many">Guess 1,000 times</button></div>
+      <p class="tour-best" aria-live="polite"></p>
+      <p class="hint">The whole Bitcoin network makes about a billion trillion guesses every second.</p>
+    </div>
+    <div class="tour-nav"><div class="tour-dots" aria-hidden="true"></div><div class="row"><button class="btn btn-ghost tour-back">Back</button><button class="btn tour-next">Next</button></div></div>
+  </div>
+
+  <!-- step 1: gate -->
+  <div class="page" data-page="gate" hidden>
+    <div><h3>Set up your wallet</h3><p class="hint">You need a wallet before mining. Create a fresh one, or load an existing wallet.</p></div>
+    <div class="gate-cards">
+      <div class="gc"><h3>Create new wallet</h3><p class="hint">Generates a 12-word recovery phrase in this browser.</p><button class="btn b-new">Create wallet</button></div>
+      <div class="gc"><h3>Upload wallet</h3><p class="hint">A .txt with your 12 words, or a .json with an address.</p><label class="btn btn-ghost">Choose file<input type="file" class="b-up" accept=".txt,.json,application/json,text/plain" hidden></label></div>
+    </div>
+    <p class="err" role="alert"></p>
+  </div>
+
+  <!-- step 2: reveal phrase -->
+  <div class="page" data-page="reveal" hidden>
+    <div><h3>Your recovery phrase</h3><p class="warn">Write these 12 words down. Anyone with them controls the wallet. This is a demo — never type a real phrase into a site you don't trust.</p></div>
+    <ol class="words"></ol>
+    <div class="row"><button class="btn b-copy">Copy words</button><button class="btn btn-ghost b-dl">Download .txt</button></div>
+    <label class="confirm"><input type="checkbox" class="b-saved"> I've saved my recovery phrase</label>
+    <button class="btn b-go" disabled>Continue to miner</button>
+  </div>
+
+  <!-- step 3: mine -->
+  <div class="page" data-page="mine" hidden>
+    <div class="rig">
+      <button class="mine-btn" aria-pressed="false"><span class="mine-label">Mine BTC</span><span class="mine-sub">Start</span></button>
+      <dl class="stats">
+        <div><dt>Hashrate</dt><dd class="s-rate">0 H/s</dd></div>
+        <div><dt>Hashes</dt><dd class="s-count">0</dd></div>
+        <div><dt>Best zeros</dt><dd class="s-best">0</dd></div>
+        <div><dt>Shares</dt><dd class="s-shares">0</dd></div>
+      </dl>
+    </div>
+    <div class="hashline"><span class="hint">Latest hash — a share needs 4 leading zeros.</span><code class="s-hash">Press Start to begin.</code></div>
+    <div class="payout"><span class="hint">Pay out to</span><select class="payout-sel"></select></div>
+    <div class="tour-cta"><button class="btn btn-ghost b-tour"><span class="q" aria-hidden="true">?</span>See tutorial</button><span class="hint">How Bitcoin mining works, in a minute.</span></div>
+  </div>
+
+  <!-- wallet -->
+  <div class="page" data-page="wallet" hidden>
+    <div><h3>Wallets</h3><p class="hint">Pick which one receives payouts, or add more.</p></div>
+    <ul class="w-list"></ul>
+    <div class="reveal-box" hidden></div>
+    <div class="row">
+      <input type="text" class="w-addr" placeholder="Paste address bc1q…" aria-label="Bitcoin address" spellcheck="false" autocomplete="off">
+      <button class="btn w-add">Add</button>
+    </div>
+    <div class="row"><button class="btn btn-ghost w-create">Create another</button><label class="btn btn-ghost">Upload<input type="file" class="w-up" accept=".txt,.json" hidden></label></div>
+    <p class="err" role="alert"></p>
+  </div>
+
+  <!-- activity -->
+  <div class="page" data-page="log" hidden>
+    <ol class="log"><li class="empty">Nothing yet. Set up a wallet and start mining.</li></ol>
+  </div>
+</section>
+</template>
+
+<script>
+/* ---------- SHA-256 ---------- */
+const K=[],H0=[];
+(()=>{let n=2,c=0;const f=x=>(x-Math.floor(x))*4294967296|0;
+  while(c<64){let p=1;for(let d=2;d*d<=n;d++)if(n%d===0){p=0;break}
+    if(p){if(c<8)H0[c]=f(Math.sqrt(n));K[c]=f(Math.cbrt(n));c++}n++}})();
+const ror=(x,n)=>(x>>>n)|(x<<(32-n));const W=new Array(64);
+function sha256(msg){const b=[];for(let i=0;i<msg.length;i++)b.push(msg.charCodeAt(i)&255);
+  const l=b.length*8;b.push(128);while(b.length%64!==56)b.push(0);
+  for(let i=7;i>=0;i--)b.push(i>3?0:(l>>>(i*8))&255);let H=H0.slice();
+  for(let j=0;j<b.length;j+=64){
+    for(let i=0;i<16;i++)W[i]=(b[j+4*i]<<24)|(b[j+4*i+1]<<16)|(b[j+4*i+2]<<8)|b[j+4*i+3];
+    for(let i=16;i<64;i++){const x=W[i-15],y=W[i-2];W[i]=(W[i-16]+(ror(x,7)^ror(x,18)^(x>>>3))+W[i-7]+(ror(y,17)^ror(y,19)^(y>>>10)))|0}
+    let[a,bb,c,d,e,f,g,h]=H;
+    for(let i=0;i<64;i++){const t1=(h+(ror(e,6)^ror(e,11)^ror(e,25))+((e&f)^(~e&g))+K[i]+W[i])|0;
+      const t2=((ror(a,2)^ror(a,13)^ror(a,22))+((a&bb)^(a&c)^(bb&c)))|0;h=g;g=f;f=e;e=(d+t1)|0;d=c;c=bb;bb=a;a=(t1+t2)|0}
+    H=[H[0]+a|0,H[1]+bb|0,H[2]+c|0,H[3]+d|0,H[4]+e|0,H[5]+f|0,H[6]+g|0,H[7]+h|0]}
+  return H.map(x=>(x>>>0).toString(16).padStart(8,'0')).join('');}
+
+/* ---------- helpers ---------- */
+const WORDS="abandon ability able about above absent absorb abstract access account accuse acid acquire across action actor adapt add address adjust admit adult advance advice aerobic afford afraid again age agent agree ahead aim air alarm album alert alien alpha already alter always amazing among amount anchor ancient anger angle angry animal ankle announce annual answer anxiety apart apology appear apple approve april arch arctic area arena argue armor army around arrange arrest arrive arrow artist aspect assault asset assist assume asthma athlete atom attack attend auction audit august author auto autumn average avoid awake aware away awesome awful awkward axis baby bacon badge bag balance ball bamboo banana banner bar bargain barrel base basic basket battle beach bean beauty because become beef before begin behave behind believe below belt bench benefit best betray better between beyond bicycle bid bike bind biology bird birth bitter black blade blame blanket blast bleak bless blind blood blossom blue blur board boil bomb bone bonus book boost border boring borrow boss bottom bounce box brain brand brave bread breeze brick bridge brief bright bring broken bronze broom brother brown brush bubble buddy budget buffalo build bulb bulk bullet bundle burden burger burst business busy butter buyer buzz cabin cable cactus cage cake call calm camera camp canal cancel candy cannon canoe canvas canyon capable capital captain carbon card cargo carpet carry cart case cash castle casual cat catalog catch cattle caught cause caution cave ceiling celery cement census cereal certain chair chalk champion change chaos chapter charge chase chat cheap check cheese chef cherry chest chicken chief child chimney choice choose chronic chuckle chunk churn cigar cinnamon circle citizen city civil claim clap clarify claw clay clean clerk clever click client cliff climb clinic clip clock clog close cloth cloud clown club clump cluster clutch coach coast coconut code coffee coil coin collect color column combine come comfort comic common company concert conduct confirm congress connect consider control convince cook cool copper copy coral core corn correct cost cotton couch country couple course cousin cover coyote crack cradle craft cram crane crash crater crawl crazy cream credit creek crew cricket crime crisp critic crop cross crowd crucial cruel cruise crumble crush cry crystal cube culture cup curious current curtain curve cushion custom cute cycle".split(" ");
+const BECH='qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+const ADDR_RE=/^(bc1[ac-hj-np-z02-9]{25,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/;
+const fmt=n=>n.toLocaleString('en-IN');
+const short=a=>a.length>20?a.slice(0,10)+'…'+a.slice(-6):a;
+const lead=h=>{let i=0;while(h[i]==='0')i++;return i};
+function newPhrase(){const u=new Uint32Array(12);crypto.getRandomValues(u);return Array.from(u,x=>WORDS[x%WORDS.length])}
+function addrFrom(seed){const h=sha256(seed);let s='bc1q';for(let i=0;i<38;i++)s+=BECH[parseInt(h[i%64],16)%32];return s}
+const HPF=120;
+
+/* ---------- tutorial: how Bitcoin mining works, for the visitor ---------- */
+// Shown on a first visit; once it's closed (finished or skipped) this browser remembers, and
+// "See tutorial" on the miner opens it again.
+const TOUR_KEY='tau.tutorial';
+const tourSeen=()=>{try{return localStorage.getItem(TOUR_KEY)==='seen'}catch{return false}};
+const markTourSeen=()=>{try{localStorage.setItem(TOUR_KEY,'seen')}catch{}};
+const zeros=z=>z+(z===1?' zero':' zeros');
+const sparkle=(x,y,s)=>`<path class="ac" transform="translate(${x} ${y}) scale(${s})" d="M0-8L2-2 8 0 2 2 0 8-2 2-8 0-2-2Z"/>`;
+const coin=(x,r)=>`<circle class="ac" cx="${x}" cy="52" r="${r}"/><circle class="rg" cx="${x}" cy="52" r="${r*.8}"/><text class="ai" x="${x}" y="${52+r*.36}" text-anchor="middle" font-size="${r}">₿</text>`;
+const block=x=>`<rect class="nd" x="${x}" y="28" width="48" height="48" rx="6"/><path class="ln" d="M${x+12} 42h24M${x+12} 52h18M${x+12} 62h22"/>`;
+const NODES=[[50,30],[110,14],[160,48],[232,26],[72,84],[140,90],[214,80]];
+const LINKS=[[0,1],[1,2],[2,3],[1,3],[0,4],[4,5],[5,2],[0,2],[5,6],[6,3],[2,6]];
+const TOUR=[
+  {title:'How Bitcoin mining works',
+   body:"<p>A quick tour before you start: what Bitcoin is, what your wallet is for, and what your browser does when it mines.</p><p>It takes about a minute. You can skip it, and open it again any time from the miner.</p>",
+   art:`<svg viewBox="0 0 280 104">${coin(140,42)}${sparkle(74,26,1)}${sparkle(212,80,1.2)}${sparkle(222,22,.7)}${sparkle(60,86,.6)}</svg>`},
+  {title:'Bitcoin has no boss',
+   body:"<p>Bitcoin is money that runs on thousands of computers around the world instead of a bank. Each of them keeps a copy of the same record of who owns what, and checks every payment against the same rules.</p><p>That's what <b>decentralized</b> means: no company or government is in charge, and no single computer can change the record on its own.</p>",
+   art:`<svg viewBox="0 0 280 104">${LINKS.map(([a,b])=>`<line class="ln" x1="${NODES[a][0]}" y1="${NODES[a][1]}" x2="${NODES[b][0]}" y2="${NODES[b][1]}"/>`).join('')}${NODES.map(([x,y])=>`<circle class="nd" cx="${x}" cy="${y}" r="10"/><rect class="ac" x="${x-4}" y="${y-4}" width="8" height="8" rx="1.5"/>`).join('')}</svg>`},
+  {title:'Your wallet: an address and 12 words',
+   body:"<p>Your <b>address</b> is like an account number. It's safe to share: it's where bitcoin is sent to you.</p><p>Your <b>12 words</b> are the key to the wallet. Whoever has them can spend what's in it, so write them down, keep them private and never share them. They're made in your browser and never leave it.</p>",
+   art:`<div class="tour-chips"><div><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><b>Address</b><span>Safe to share</span></div><div><svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M21 12v2"/></svg><b>12 words</b><span>Keep them secret</span></div></div>`},
+  {title:'Payments are grouped into blocks',
+   body:"<p>About every 10 minutes, the newest payments are bundled into a <b>block</b> and added to the end of the record.</p><p>Each block is locked to the one before it, so the history can't be quietly rewritten. That chain of blocks is the <b>blockchain</b>.</p>",
+   art:`<svg viewBox="0 0 280 104">${[16,82,148].map(block).join('')}${[64,130,196].map(x=>`<path class="ln" d="M${x} 52h18"/>`).join('')}<rect class="dash" x="214" y="28" width="48" height="48" rx="6"/><text class="ac ft" x="238" y="61" text-anchor="middle" font-size="24">?</text></svg>`},
+  {title:'Mining is a guessing game',
+   body:"<p>To add the next block, computers race to solve a puzzle. There's no shortcut: they mix the block with a guess, look at the result (a <b>hash</b>), and try again.</p><p>A winning hash starts with a long run of zeros, about 19 of them today. Try a few guesses yourself:</p>",
+   guess:true},
+  {title:'The winner earns new bitcoin',
+   body:"<p>The computer that finds a winning guess adds the block and is paid for it: 3.125 brand-new bitcoin, plus the fees from the payments inside. That's the only way new bitcoin is ever made.</p><p>When more computers join, the network makes the puzzle harder, so a block still takes about 10 minutes.</p>",
+   art:`<svg viewBox="0 0 280 104">${block(40)}<path class="ln" d="M104 52h52M146 42l10 10-10 10"/>${coin(200,34)}${sparkle(246,22,.8)}${sparkle(160,88,.6)}</svg>`},
+  {title:'Mining here',
+   body:"<p>Press <b>Mine BTC</b> and your browser starts guessing. You'll see its speed in hashes per second, and its <b>shares</b>: close calls that show it's doing real work.</p><p>If your browser finds a block, your payout is sent to your wallet once the block is confirmed, about 100 blocks (around 17 hours) later.</p><p class=\"hint\">Mining uses your processor, so your device may warm up or use more battery. Keep this tab open while you mine, and stop whenever you like.</p>",
+   art:`<svg viewBox="0 0 280 104"><circle class="ac" cx="80" cy="52" r="40"/><circle class="rg" cx="80" cy="52" r="32"/><path class="ai" d="M70 34v36l30-18z"/>${[22,36,30,48,40,58,50].map((h,k)=>`<rect class="ac" x="${140+k*16}" y="${88-h}" width="10" height="${h}" rx="2" opacity="${.35+k*.1}"/>`).join('')}<path class="ln" d="M134 88h120"/></svg>`},
+  {title:"You're ready",
+   body:"<ol><li>Set up a wallet: create a new one, or bring your own.</li><li>Press <b>Mine BTC</b> to start, and press it again to stop.</li><li>Payouts go to your wallet's address.</li></ol>",
+   art:`<svg viewBox="0 0 280 104"><circle class="ac" cx="140" cy="52" r="40"/><path class="ck" d="M122 53l12 12 24-26"/>${sparkle(84,30,.9)}${sparkle(200,78,1.1)}${sparkle(206,24,.6)}</svg>`}
+];
+
+const THEMES=[["ledger","Ledger"],["vault","Vault"],["arcade","Arcade"],["blueprint","Blueprint"],["terminal","Terminal"],["neon","Neon"],["swiss","Swiss"],["gold","Gold"],["comic","Comic"],["forest","Forest"],["brutal","Brutal"],["sunset","Sunset"],["ocean","Ocean"],["candy","Candy"],["copper","Copper"],["frost","Frost"],["volcano","Volcano"],["royal","Royal"],["mint","Mint"],["cyber","Cyber"],["lottery","Lottery"],["royale","Grand Casino"],["casinobtc","₿ Bitcoin Casino"],["deluxe","Deluxe ₿ Casino"],["tau","Tau"],["tau-light","Tau Light"]];
+
+/* per-theme extras for lottery & casino looks */
+const EXTRAS={
+  lottery:{balls:true},
+  royale:{marquee:true,art:true,reels:['7','🍒','🔔','💎','⭐','🍋'],jp:'Jackpot! Share found'},
+  casinobtc:{banner:'₿ Bitcoin mining table — real SHA-256 hashing, demo payouts',art:true,btc:true,label:'₿',start:'Mine BTC'},
+  deluxe:{marquee:true,art:true,btc:true,rain:true,label:'₿',start:'Mine BTC',jp:'₿ Jackpot! Share found',
+    banner:'₿ Bitcoin mining  ★  Jackpot = share found  ★  Real SHA-256 in your browser  ★  Demo only, no real payouts  ★',scroll:true,
+    reels:['₿','💎','7','🍒','⭐','🔔']}
+};
+function casinoArt(btc){
+  const chip=(x,c,t)=>`<g transform="translate(${x} 58)"><circle r="24" fill="${c}"/><circle r="24" fill="none" stroke="#fff" stroke-width="5" stroke-dasharray="6.3 6.3"/><circle r="15" fill="${c}" stroke="#fff" stroke-width="1.5"/><text y="6" text-anchor="middle" font-size="16" font-weight="700" fill="#fff" font-family="Rubik,sans-serif">${t}</text></g>`;
+  const card=(x,r,rank,suit,col)=>`<g transform="translate(${x} 10) rotate(${r} 26 38)"><rect width="52" height="76" rx="6" fill="#fff" stroke="#C99A2E" stroke-width="1.5"/><text x="7" y="19" font-size="15" font-weight="700" fill="${col}" font-family="Georgia,serif">${rank}</text><text x="26" y="54" font-size="28" text-anchor="middle" fill="${col}">${suit}</text></g>`;
+  const die=`<g transform="translate(262 36) rotate(14 18 18)"><rect width="36" height="36" rx="7" fill="#fff" stroke="#999"/>${[[9,9],[27,9],[18,18],[9,27],[27,27]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="3.2" fill="#C8102E"/>`).join('')}</g>`;
+  return `<svg class="art" viewBox="0 0 320 96" aria-hidden="true">${card(6,-14,'A','♠','#111')}${card(44,8,btc?'₿':'K',btc?'♦':'♥','#C8102E')}${chip(140,'#C8102E',btc?'₿':'')}${chip(186,'#111',btc?'₿':'')}${chip(232,btc?'#F7931A':'#1F4BFF',btc?'₿':'')}${die}</svg>`;
+}
+function buildReels(symbols,jpText){
+  const wrap=document.createElement('div');wrap.className='reels';wrap.setAttribute('aria-hidden','true');
+  for(let r=0;r<3;r++){const reel=document.createElement('div');reel.className='reel';const strip=document.createElement('div');strip.className='strip';
+    strip.style.animationDuration=(0.45+r*0.17)+'s';[...symbols,...symbols].forEach(s=>{const c=document.createElement('span');c.textContent=s;strip.append(c)});
+    reel.append(strip);wrap.append(reel)}
+  const jp=document.createElement('div');jp.className='jackpot';jp.textContent=jpText||'Jackpot!';wrap.append(jp);return wrap;
+}
+const grid=document.getElementById('grid'),tpl=document.getElementById('tpl');
+
+function setup(app,theme,i){
+  const $=s=>app.querySelector(s);
+  const st={running:false,nonce:0,count:0,best:0,shares:0,wallets:[],payout:null,prev:addrFrom(theme+i+Math.random()),rc:0,rt:performance.now(),pending:null};
+  const err=()=>$('[data-page=gate] .err'),werr=$('[data-page=wallet] .err'),logEl=$('.log'),sel=$('.payout-sel');
+
+  /* ----- lottery / casino extras ----- */
+  const ex=EXTRAS[theme]||{};const startTxt=ex.start||'Start';
+  if(ex.label)$('.mine-label').textContent=ex.label;
+  $('.mine-sub').textContent=startTxt;
+  if(ex.banner){const b=document.createElement('div');b.className='banner'+(ex.scroll?' scroll':'');const s=document.createElement('span');
+    s.textContent=ex.scroll?ex.banner+'      '+ex.banner:ex.banner;b.append(s);$('.app-top').after(b)}
+  if(ex.marquee){const m=document.createElement('div');m.className='marquee';m.setAttribute('aria-hidden','true');app.prepend(m);app.classList.add('has-marquee')}
+  if(ex.art){$('[data-page=gate]').insertAdjacentHTML('beforeend',casinoArt(ex.btc));$('[data-page=mine]').insertAdjacentHTML('beforeend',casinoArt(ex.btc))}
+  let strips=[];
+  const restReels=idx=>strips.forEach(s=>s.style.transform=`translateY(-${(idx??Math.floor(Math.random()*ex.reels.length))*54}px)`);
+  if(ex.reels){const w=buildReels(ex.reels,ex.jp);$('.rig').after(w);strips=[...w.querySelectorAll('.strip')];restReels()}
+  const balls=[];let lastBall=0;
+  if(ex.balls){const w=document.createElement('div');w.className='ball-wrap';
+    w.innerHTML='<div class="balls" aria-hidden="true"></div><span class="hint">Numbers drawn from the latest hash</span>';
+    const bw=w.querySelector('.balls');for(let k=0;k<6;k++){const s=document.createElement('span');s.textContent='?';bw.append(s);balls.push(s)}
+    $('.rig').after(w)}
+  function celebrate(){
+    if(strips.length){restReels(0);app.classList.remove('jackpot-on');void app.offsetWidth;app.classList.add('jackpot-on');
+      clearTimeout(st.jt);st.jt=setTimeout(()=>{app.classList.remove('jackpot-on');if(!st.running)restReels()},1500)}
+    if(ex.rain&&!matchMedia('(prefers-reduced-motion: reduce)').matches){let r=app.querySelector('.rain');
+      if(!r){r=document.createElement('div');r.className='rain';r.setAttribute('aria-hidden','true');app.append(r)}
+      for(let k=0;k<14;k++){const c=document.createElement('i');c.textContent='₿';c.style.left=Math.random()*92+'%';
+        c.style.animationDuration=(1.2+Math.random()*1.1)+'s';c.style.animationDelay=Math.random()*.4+'s';r.append(c);setTimeout(()=>c.remove(),2900)}}
+  }
+
+  function show(name){app.querySelectorAll('.page').forEach(p=>p.hidden=p.dataset.page!==name);
+    app.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===name))}
+  function log(t){const e=logEl.querySelector('.empty');if(e)e.remove();
+    const li=document.createElement('li'),tm=document.createElement('time'),sp=document.createElement('span');
+    tm.textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});sp.textContent=t;
+    li.append(tm,sp);logEl.prepend(li);while(logEl.children.length>60)logEl.lastChild.remove()}
+
+  app.querySelectorAll('.tabs button').forEach(t=>t.addEventListener('click',()=>show(t.dataset.tab)));
+  const fb=$('.focus-btn');
+  fb.addEventListener('click',()=>{const on=!app.classList.contains('is-focus');
+    document.querySelectorAll('.app').forEach(a=>{a.classList.remove('is-focus');a.querySelector('.focus-btn').textContent='⤢'});
+    document.body.classList.toggle('focused',on);if(on){app.classList.add('is-focus');fb.textContent='⤡'}});
+
+  /* ----- wallets ----- */
+  function addWallet(w){if(st.wallets.some(x=>x.address===w.address))return false;
+    st.wallets.push(w);if(!st.payout)st.payout=w;renderWallets();return true}
+  function renderWallets(){const ul=$('.w-list');ul.innerHTML='';sel.innerHTML='';
+    if(!st.wallets.length){ul.innerHTML='<li class="empty">No wallets yet.</li>';sel.innerHTML='<option>No wallet</option>';sel.disabled=true;return}
+    sel.disabled=false;
+    st.wallets.forEach((w,idx)=>{const li=document.createElement('li');if(w===st.payout)li.classList.add('is-payout');
+      const name=document.createElement('strong');name.textContent=w.label+' ';
+      const src=document.createElement('span');src.className='src';src.textContent=w.source;name.append(src);
+      const code=document.createElement('code');code.textContent=w.address;
+      const use=document.createElement('button');use.className='btn btn-ghost use';use.textContent=w===st.payout?'Payout':'Use';use.disabled=w===st.payout;
+      use.addEventListener('click',()=>{st.payout=w;log('Payouts → '+short(w.address));renderWallets()});
+      li.append(name,use,code);
+      if(w.phrase){const r=document.createElement('button');r.className='btn btn-ghost';r.style.gridColumn='1';r.style.justifySelf='start';r.textContent='Reveal phrase';
+        const box=$('.reveal-box');r.addEventListener('click',()=>{box.hidden=!box.hidden;box.textContent=w.phrase.join(' ')});li.append(r)}
+      ul.append(li);
+      const o=document.createElement('option');o.value=idx;o.textContent=w.label+' · '+short(w.address);o.selected=w===st.payout;sel.append(o)});}
+  sel.addEventListener('change',()=>{st.payout=st.wallets[+sel.value];log('Payouts → '+short(st.payout.address));renderWallets()});
+
+  function ready(){app.classList.add('ready');renderWallets();show('mine');log('Wallet ready: '+short(st.payout.address))}
+
+  /* ----- onboarding: create ----- */
+  $('.b-new').addEventListener('click',()=>{st.pending=newPhrase();
+    const ol=$('.words');ol.innerHTML='';st.pending.forEach(w=>{const li=document.createElement('li');li.textContent=w;ol.append(li)});
+    $('.b-saved').checked=false;$('.b-go').disabled=true;show('reveal')});
+  $('.b-saved').addEventListener('change',e=>$('.b-go').disabled=!e.target.checked);
+  $('.b-copy').addEventListener('click',async()=>{const txt=st.pending.join(' ');const btn=$('.b-copy');
+    try{await navigator.clipboard.writeText(txt)}catch{const ta=document.createElement('textarea');ta.value=txt;document.body.append(ta);ta.select();try{document.execCommand('copy')}catch{}ta.remove()}
+    btn.textContent='Copied ✓';setTimeout(()=>btn.textContent='Copy words',1500)});
+  $('.b-dl').addEventListener('click',()=>{const blob=new Blob([st.pending.join(' ')+"\n\nKeep this phrase secret. Demo wallet."],{type:'text/plain'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=theme+'-wallet.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)});
+  $('.b-go').addEventListener('click',()=>{addWallet({label:'My wallet',address:addrFrom(st.pending.join(' ')),source:'created',phrase:st.pending});st.pending=null;ready()});
+
+  /* ----- onboarding: upload ----- */
+  async function parseFile(file,onErr){
+    let data;try{data=await file.text()}catch{onErr('Could not read that file.');return}
+    const name=file.name.replace(/\.(txt|json)$/i,'');
+    try{const j=JSON.parse(data);
+      if(typeof j.mnemonic==='string')return handlePhrase(j.mnemonic,name);
+      const addr=j.address||(Array.isArray(j.addresses)&&j.addresses[0]);
+      if(addr&&ADDR_RE.test(String(addr).trim()))return {label:name,address:String(addr).trim(),source:'uploaded'};
+      onErr('No phrase or address found in that JSON.');return}catch{}
+    return handlePhrase(data,name,onErr);
+    function handlePhrase(text,nm,oe){const ws=text.trim().split(/\s+/).filter(Boolean);
+      if(ws.length===12||ws.length===24)return {label:nm,address:addrFrom(ws.join(' ')),source:'uploaded',phrase:ws};
+      (oe||onErr)('Expected 12 or 24 words, got '+ws.length+'.');return null}
+  }
+  $('.b-up').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;err().textContent='';
+    const w=await parseFile(f,m=>err().textContent=m);if(w){addWallet(w);ready()}});
+
+  /* ----- wallet tab actions ----- */
+  const wi=$('.w-addr');
+  $('.w-add').addEventListener('click',()=>{const a=wi.value.trim();werr.textContent='';
+    if(!ADDR_RE.test(a)){werr.textContent='Address should start with bc1, 1, or 3.';return}
+    if(addWallet({label:'Address',address:a,source:'pasted'})){wi.value='';log('Added '+short(a))}else werr.textContent='Already in your list.'});
+  wi.addEventListener('keydown',e=>{if(e.key==='Enter')$('.w-add').click()});
+  $('.w-create').addEventListener('click',()=>{const p=newPhrase();addWallet({label:'Wallet',address:addrFrom(p.join(' ')),source:'created',phrase:p});log('Created another wallet')});
+  $('.w-up').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;werr.textContent='';
+    const w=await parseFile(f,m=>werr.textContent=m);if(w){addWallet(w);log('Uploaded '+short(w.address))}});
+
+  /* ----- tutorial ----- */
+  let tourAt=0,guesses=0;
+  const dots=TOUR.map(()=>{const d=document.createElement('i');$('.tour-dots').append(d);return d});
+  function renderTour(){const s=TOUR[tourAt],last=tourAt===TOUR.length-1;
+    $('.tour-count').textContent=(tourAt+1)+' / '+TOUR.length;
+    $('.tour-art').innerHTML=s.art||'';$('.tour-art').hidden=!s.art;
+    $('.tour-title').textContent=s.title;$('.tour-body').innerHTML=s.body;
+    $('.tour-guess').hidden=!s.guess;$('.tour-back').hidden=tourAt===0;$('.tour-skip').hidden=last;
+    $('.tour-next').textContent=tourAt===0?'Start the tour':!last?'Next':app.classList.contains('ready')?'Back to the miner':'Set up my wallet';
+    dots.forEach((d,k)=>d.classList.toggle('on',k===tourAt))}
+  function openTour(){tourAt=0;renderTour();show('tour')}
+  function closeTour(){markTourSeen();show(app.classList.contains('ready')?'mine':'gate')}
+  $('.tour-next').addEventListener('click',()=>{if(tourAt===TOUR.length-1)return closeTour();tourAt++;renderTour()});
+  $('.tour-back').addEventListener('click',()=>{if(tourAt>0){tourAt--;renderTour()}});
+  $('.tour-skip').addEventListener('click',closeTour);
+  $('.b-tour').addEventListener('click',openTour);
+  function guess(n){let best=-1,bh='';
+    for(let k=0;k<n;k++){const h=sha256('block'+theme+guesses+Math.random());guesses++;const z=lead(h);if(z>best){best=z;bh=h}}
+    $('.tour-hash').innerHTML='<span class="z">'+bh.slice(0,best)+'</span>'+bh.slice(best);
+    $('.tour-best').textContent=(n===1?'That guess':'Best of '+fmt(n)+' guesses')+': '+zeros(best)+'. A winning hash needs about 19.'}
+  $('.tg-one').addEventListener('click',()=>guess(1));
+  $('.tg-many').addEventListener('click',()=>guess(1000));
+
+  /* ----- mining ----- */
+  const mb=$('.mine-btn');
+  mb.addEventListener('click',()=>{st.running=!st.running;mb.setAttribute('aria-pressed',st.running);
+    $('.mine-sub').textContent=st.running?'Stop':startTxt;app.classList.toggle('is-running',st.running);
+    if(!st.running&&strips.length)restReels();
+    if(st.running){st.rc=0;st.rt=performance.now();log('Started mining → '+short(st.payout.address))}
+    else{$('.s-rate').textContent='0 H/s';log('Stopped at '+fmt(st.count)+' hashes')}});
+  function step(){if(!st.running)return;const tag=st.payout?st.payout.address:'';let h='',z=0;
+    for(let i=0;i<HPF;i++){h=sha256(st.prev+tag+st.nonce);st.nonce++;st.count++;st.rc++;z=lead(h);if(z>st.best)st.best=z;
+      if(z>=4){st.shares++;st.prev=h;log('Share found · '+z+' zeros · nonce '+fmt(st.nonce));app.classList.add('share');setTimeout(()=>app.classList.remove('share'),600);celebrate();break}}
+    z=lead(h);$('.s-hash').innerHTML='<span class="z">'+h.slice(0,z)+'</span>'+h.slice(z);
+    $('.s-count').textContent=fmt(st.count);$('.s-best').textContent=st.best;$('.s-shares').textContent=st.shares;
+    const now=performance.now();
+    if(balls.length&&now-lastBall>350){lastBall=now;balls.forEach((b,k)=>{b.textContent=parseInt(h.substr(k*2+8,2),16)%49+1;b.classList.remove('pop');void b.offsetWidth;b.classList.add('pop')})}
+    if(now-st.rt>500){$('.s-rate').textContent=fmt(Math.round(st.rc*1000/(now-st.rt)))+' H/s';st.rc=0;st.rt=now}}
+
+  renderWallets();
+  if(tourSeen())show('gate');else openTour();
+  return {step};
+}
+
+const miners=THEMES.map(([id,name],i)=>{const node=tpl.content.firstElementChild.cloneNode(true);
+  node.dataset.theme=id;node.querySelector('.brand b').textContent=name;node.querySelector('.idx').textContent=(i+1)+'/'+THEMES.length;
+  node.setAttribute('aria-label',name+' theme');grid.append(node);return setup(node,id,i)});
+(function loop(){for(const m of miners)m.step();requestAnimationFrame(loop)})();
+document.getElementById('reset-tour').addEventListener('click',()=>{try{localStorage.removeItem(TOUR_KEY)}catch{}location.reload()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const f=document.querySelector('.app.is-focus .focus-btn');if(f)f.click()}});
+</script>
+</body>
+</html>
