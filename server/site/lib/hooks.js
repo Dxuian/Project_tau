@@ -10,6 +10,7 @@ import { track } from './analytics.js';
 /** Samples kept for the graph: 3 minutes at one every 2 s (the miner's hashrate event). */
 const SAMPLES = 90;
 const SAVED = 'tau.address';
+const TUTORIAL = 'tau.tutorial';
 
 export function useMiner({ address, network, bridgeUrl, pool, minerUrl }) {
   const [state, setState] = useState('idle');
@@ -212,6 +213,29 @@ export function useSavedAddress(network) {
     setAddress(null);
   }, []);
   return { address, ready, choose, forget };
+}
+
+/** Whether this device has seen the tutorial: it opens by itself only until it's closed once. */
+export function useTutorial() {
+  const [seen, setSeen] = useState(null); // null until read
+  useEffect(() => {
+    let value = false;
+    try {
+      value = localStorage.getItem(TUTORIAL) === 'seen';
+    } catch {
+      // not readable: show it
+    }
+    setSeen(value);
+  }, []);
+  const markSeen = useCallback(() => {
+    setSeen(true);
+    try {
+      localStorage.setItem(TUTORIAL, 'seen');
+    } catch {
+      // private mode: it opens again next visit
+    }
+  }, []);
+  return { ready: seen !== null, seen: Boolean(seen), markSeen };
 }
 
 /** A value from localStorage (a preference), with its setter. */

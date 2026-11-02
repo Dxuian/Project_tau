@@ -1,11 +1,12 @@
 'use client';
-// Project Tau on one screen. First, until the visitor has a payout address: the
-// wallet setup (components/wallet-setup.js). Then the miner. Left: the rig (the
+// Project Tau on one screen. On a first visit: the tutorial (components/tutorial.js).
+// Then, until the visitor has a payout address: the wallet setup
+// (components/wallet-setup.js). Then the miner, where "See tutorial" opens it again. Left: the rig (the
 // mine button, the hashrate, the stats, the speed) and the live graph. Right: the
 // details (the payout address, this hour's mining address, the visitor's blocks).
 // Nothing loads or mines until the visitor presses the mine button.
 import { gsap } from 'gsap';
-import { ActivityIcon, CpuIcon, GaugeIcon, GlobeIcon, ShieldCheckIcon, TimerIcon, ZapIcon } from 'lucide-react';
+import { ActivityIcon, CircleQuestionMarkIcon, CpuIcon, GaugeIcon, GlobeIcon, ShieldCheckIcon, TimerIcon, ZapIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import AnimatedRate from '@/components/animated-rate';
 import BlocksCard from '@/components/blocks-card';
@@ -13,14 +14,17 @@ import { celebrate } from '@/components/celebrate';
 import HashrateChart from '@/components/hashrate-chart';
 import PayoutCard from '@/components/payout-card';
 import ThemePicker from '@/components/theme-picker';
+import Tutorial from '@/components/tutorial';
 import WalletSetup from '@/components/wallet-setup';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { track } from '@/lib/analytics';
 import { countdown, duration } from '@/lib/format';
-import { useHour, useMiner, usePayouts, usePreference, useSavedAddress, useTick } from '@/lib/hooks';
+import { useHour, useMiner, usePayouts, usePreference, useSavedAddress, useTick, useTutorial } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
 
 const SPEEDS = { 25: 'Quarter', 50: 'Half', 75: '75%', 100: 'Full' };
@@ -41,8 +45,24 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
   const blocks = usePayouts(saved.address);
   const [live, setLive] = usePreference('tau.graph', true);
   const [changing, setChanging] = useState(false);
+  const tutorial = useTutorial();
+  const [tutorialStep, setTutorialStep] = useState(0);
+  const [tutorialOpen, setTutorialOpen] = useState(false); // reopened from the miner
   const rig = useRef(null);
-  const view = !saved.ready ? 'loading' : !saved.address || changing ? 'setup' : 'miner';
+  const view = !saved.ready || !tutorial.ready ? 'loading' : !tutorial.seen ? 'tutorial' : !saved.address || changing ? 'setup' : 'miner';
+
+  const openTutorial = () => {
+    setTutorialStep(0);
+    setTutorialOpen(true);
+    track('tutorial_opened');
+  };
+  // Skipped or finished, it counts as seen: it won't open by itself again.
+  const closeTutorial = (finished) => {
+    track('tutorial_closed', { finished, step: tutorialStep + 1, first_visit: !tutorial.seen });
+    tutorial.markSeen();
+    setTutorialOpen(false);
+    setTutorialStep(0);
+  };
 
   // A small jolt when mining starts.
   useEffect(() => {
@@ -60,7 +80,7 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
   }, [count]);
 
   const blocker = !saved.address ? 'Add a payout address first.' : !mining ? 'Mining is unavailable right now.' : null;
-  const [stateLabel, dot] = view !== 'miner' ? ['Setup', 'bg-primary'] : mining ? STATES[miner.state] ?? STATES.idle : ['Unavailable', 'bg-destructive'];
+  const [stateLabel, dot] = view === 'tutorial' ? ['Tutorial', 'bg-primary'] : view !== 'miner' ? ['Setup', 'bg-primary'] : mining ? STATES[miner.state] ?? STATES.idle : ['Unavailable', 'bg-destructive'];
   const toggle = () => (miner.running ? miner.stop() : miner.start(mining?.index));
 
   return (
@@ -92,11 +112,26 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
               <span className={cn('size-2 rounded-full', dot)} />
               {stateLabel}
             </span>
+            {view === 'miner' && (
+              <Button variant="outline" size="sm" onClick={openTutorial} data-testid="see-tutorial">
+                <CircleQuestionMarkIcon />
+                <span className="sr-only sm:not-sr-only">See tutorial</span>
+              </Button>
+            )}
             <ThemePicker />
           </div>
         </header>
 
         {view === 'loading' && <div aria-hidden className="mx-auto mt-10 h-64 w-full max-w-5xl animate-pulse rounded-2xl border bg-card" />}
+        {view === 'tutorial' && (
+          <div className="flex flex-1 items-start justify-center py-4 sm:py-8 lg:items-center lg:pb-24">
+            <Card {...reveal(1)} className="reveal w-full max-w-xl">
+              <CardContent>
+                <Tutorial step={tutorialStep} onStep={setTutorialStep} onClose={closeTutorial} finishLabel={saved.address ? 'Go to the miner' : 'Set up my wallet'} />
+              </CardContent>
+            </Card>
+          </div>
+        )}
         {view === 'setup' && (
           <div className="flex flex-1 items-start justify-center py-4 sm:py-8 lg:items-center lg:pb-24">
             <WalletSetup
@@ -281,6 +316,12 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
         </div>
         )}
       </div>
+
+      <Dialog open={tutorialOpen} onOpenChange={(open) => !open && closeTutorial(false)}>
+        <DialogContent showClose={false} aria-describedby={undefined} className="sm:max-w-xl">
+          <Tutorial step={tutorialStep} onStep={setTutorialStep} onClose={closeTutorial} finishLabel="Back to the miner" Title={DialogTitle} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

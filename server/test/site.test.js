@@ -109,9 +109,21 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   const page = await context.newPage();
   page.on('pageerror', (e) => console.error('page error:', e.message));
 
-  // First the wallet setup (in Arcade, the default theme): no miner until it's done. Create a wallet in the browser.
+  // A first visit opens with the tutorial (in Arcade, the default theme): how Bitcoin mining works, with a try-it guess.
   await page.goto(`${site}/`);
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'arcade');
+  await page.getByTestId('tutorial').waitFor();
+  assert.equal(await page.getByTestId('setup').count(), 0, 'the tutorial first');
+  assert.equal((await page.getByTestId('tutorial-count').innerText()).trim(), '1 / 8');
+  for (let i = 0; i < 4; i++) await page.getByTestId('tutorial-next').click();
+  await page.getByTestId('guess-many').click();
+  await page.getByTestId('guess-result').getByText(/^Best of 1,000 guesses: \d+ zeros?\. A winning hash needs about 19\.$/).waitFor();
+  for (let i = 0; i < 3; i++) await page.getByTestId('tutorial-next').click();
+  assert.equal((await page.getByTestId('tutorial-next').innerText()).trim(), 'Set up my wallet');
+  await page.getByTestId('tutorial-next').click();
+  assert.equal(await page.evaluate(() => localStorage.getItem('tau.tutorial')), 'seen', 'remembered: it opens by itself only once');
+
+  // Then the wallet setup: no miner until it's done. Create a wallet in the browser.
   await page.getByTestId('setup').waitFor();
   assert.equal(await page.getByTestId('start').count(), 0, 'no mine button before a wallet');
   await page.getByTestId('create-wallet').click();
@@ -188,6 +200,12 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   assert.equal((await page.getByTestId('state').innerText()).trim(), 'Idle');
   const before = pool.found.length;
   await page.getByTestId('start').click();
+  // While it mines, "See tutorial" opens the tutorial again, over the miner.
+  await page.getByTestId('see-tutorial').click();
+  await page.getByRole('dialog').getByTestId('tutorial').waitFor();
+  assert.equal((await page.getByTestId('tutorial-count').innerText()).trim(), '1 / 8');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('tutorial').waitFor({ state: 'detached' });
   await until(() => pool.found.length > before, 120_000, 'a block from the page');
   // The live graph has points, and can be switched off.
   await page.locator('canvas[role=img]').waitFor();
@@ -218,7 +236,7 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
     throw new Error(`analytics test error for ${a}`);
   }), address);
   const expected = ['$pageview', 'wallet_created', 'backup_downloaded', 'words_shared', 'words_copied', 'payout_address_chosen', 'wallet_restored'];
-  expected.push('theme_changed', 'mining_started', 'mining_stopped', 'payout_checked', 'blocks_seen', '$exception');
+  expected.push('tutorial_closed', 'tutorial_opened', 'theme_changed', 'mining_started', 'mining_stopped', 'payout_checked', 'blocks_seen', '$exception');
   const names = () => new Set(ph.events().map((e) => e.event));
   try {
     await until(() => expected.every((n) => names().has(n)), 30_000, 'the analytics events');

@@ -59,7 +59,11 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
       - `d1-stores.js` with its own `schema.js` and `migrations/`;
       - `wrangler.toml`, with a cron every 15 minutes for payouts, the share purge and the health event. It has `global_fetch_strictly_public` too, so the health check can fetch the site.
   - `site/`: the website, Next.js 16 App Router, plain JS: **one screen** (`app/page.js` renders `app/dashboard.js`). `/wallet` and `/mine/:address` redirect to it (`next.config.mjs`).
-    - **The wallet setup comes first** (`components/wallet-setup.js`): until the device has a payout address, there is no mine button at all. It offers three ways: create a wallet (`components/recovery-phrase.js`, with a "saved it" confirmation), upload a file (`readWalletFile` in `lib/backup.js`) or paste an address. The miner's "Change" returns to it.
+    - **A first visit opens with the tutorial** (`components/tutorial.js`), which explains how Bitcoin mining works to a visitor new to it, in plain words. It shows until it's closed once (skipped or finished), which `useTutorial` remembers in `localStorage` (`tau.tutorial`). "See tutorial" in the miner's header opens it again in a dialog, and mining carries on underneath.
+      - Keep its claims true: the numbers (3.125 BTC, about 19 zeros, about a billion trillion guesses a second, 100 confirmations) date from 2026.
+      - Its guess game hashes in the browser (Web Crypto) and sends nothing.
+      - As in the rest of the site, there's no 10% or "lottery ticket" copy.
+    - **Then the wallet setup** (`components/wallet-setup.js`): until the device has a payout address, there is no mine button at all. It offers three ways: create a wallet (`components/recovery-phrase.js`, with a "saved it" confirmation), upload a file (`readWalletFile` in `lib/backup.js`) or paste an address. The miner's "Change" returns to it.
     - **UI:** shadcn/ui components in plain JS (`components/ui/`, `components.json`, `cn` in `lib/utils.js`, `@/` imports through `jsconfig.json`) on Tailwind CSS v4 (`postcss.config.mjs`, `app/globals.css`), with GSAP for the motion. No daisyUI, which fights shadcn's theme.
     - **Themes:** `lib/themes.js` lists them (Arcade is the default, on `<html data-theme>`), `app/themes.css` styles them, and `components/theme-picker.js` switches them.
       - Each theme sets `--t-*` tokens, which `[data-theme]` maps onto shadcn's. Each has its own `.mine-btn` look.

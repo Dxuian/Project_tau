@@ -121,6 +121,7 @@ test('the site on Cloudflare: a wallet, the hour address rendered by the site Wo
   const page = await (await desktopContext(browser)).newPage();
   page.on('pageerror', (e) => console.error('page error:', e.message));
   await page.goto(`${site}/`);
+  await page.getByTestId('tutorial-skip').click(); // a first visit: the tutorial, skipped
   await page.getByTestId('create-wallet').click();
   const address = (await page.getByTestId('new-address').innerText()).trim();
   assert.match(address, /^bcrt1q/);
