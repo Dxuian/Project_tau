@@ -4,7 +4,8 @@
 // web vitals, and no remote config or scripts from PostHog, because the page
 // shows a new wallet's 12 words. Bitcoin addresses are cut out of everything sent
 // (an error message may hold one), and every event carries `app` (lib/config.js).
-import posthog from 'posthog-js';
+// posthog-js loads in its own chunk once analytics starts (after the page has shown),
+// so it doesn't hold up the first paint; calls made while it loads wait for it.
 
 // bech32 (bc1, tb1, bcrt1, either case) and base58 (1, 2, 3, m, n) addresses.
 const BECH32 = /\b(?:bc|tb|bcrt)1[02-9ac-hj-np-z]{6,87}\b/gi;
@@ -32,11 +33,43 @@ export function prepareEvent(event, { app, network }) {
 }
 
 let started = false;
+let posthog = null; // the library, once loaded and started
+const waiting = []; // calls made while it loads
+
+/** Runs `fn(posthog)` now, or once PostHog has loaded; nothing while analytics is off. */
+function withPostHog(fn) {
+  if (posthog) fn(posthog);
+  else if (started) waiting.push(fn);
+}
 
 /** Starts PostHog once, with `config` from analyticsConfig() (null: analytics stays off). */
 export function startAnalytics(config) {
   if (started || !config || typeof window === 'undefined') return;
   started = true;
+  // Uncaught errors (React reports render errors the same way), for PostHog's error
+  // tracking: the core captureException, since its own autocapture would load a script.
+  // Stack traces resolve through the public source maps (next.config.mjs).
+  window.addEventListener('error', (e) => {
+    if (e.error || e.message !== 'Script error.') withPostHog((ph) => ph.captureException(e.error ?? new Error(e.message)));
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    withPostHog((ph) => ph.captureException(e.reason instanceof Error ? e.reason : new Error(String(e.reason))));
+  });
+  import('posthog-js').then(
+    ({ default: ph }) => {
+      init(ph, config);
+      posthog = ph;
+      for (const fn of waiting.splice(0)) fn(ph);
+    },
+    () => {
+      // The chunk didn't load (offline, blocked): analytics stays off.
+      started = false;
+      waiting.length = 0;
+    },
+  );
+}
+
+function init(posthog, config) {
   posthog.init(config.key, {
     api_host: config.host,
     // Page views, also on client-side navigation; everything else comes from track().
@@ -64,18 +97,9 @@ export function startAnalytics(config) {
     respect_dnt: true,
     before_send: (event) => prepareEvent(event, config),
   });
-  // Uncaught errors (React reports render errors the same way), for PostHog's error
-  // tracking: the core captureException, since its own autocapture would load a script.
-  // Stack traces resolve through the public source maps (next.config.mjs).
-  window.addEventListener('error', (e) => {
-    if (e.error || e.message !== 'Script error.') posthog.captureException(e.error ?? new Error(e.message));
-  });
-  window.addEventListener('unhandledrejection', (e) => {
-    posthog.captureException(e.reason instanceof Error ? e.reason : new Error(String(e.reason)));
-  });
 }
 
-/** Sends a named event; does nothing while analytics is off. Never pass words or addresses. */
+/** Sends a named event (once PostHog has loaded); does nothing while analytics is off. Never pass words or addresses. */
 export function track(event, properties) {
-  if (started) posthog.capture(event, properties);
+  withPostHog((ph) => ph.capture(event, properties));
 }

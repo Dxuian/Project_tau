@@ -64,6 +64,11 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
       - Keep its claims true: the numbers (3.125 BTC, about 19 zeros, 100 confirmations) date from 2026.
       - Its guess game hashes in the browser (Web Crypto) and sends nothing.
       - As in the rest of the site, there's no 10% or "lottery ticket" copy.
+    - **SEO** (`lib/site.js`: the name, `SITE_URL` bitrush.online, the description, keywords and the structured data):
+      - `app/layout.js`'s metadata: canonical, Open Graph, Twitter card, robots, and JSON-LD (WebSite, WebApplication, and an FAQPage in the tutorial's words); a `<noscript>` says what the page is;
+      - `app/robots.js`, `app/sitemap.js`, `app/manifest.js` and `public/llms.txt`; www.bitrush.online redirects to bitrush.online (`next.config.mjs`);
+      - the icons and share image (`app/icon.svg`, `apple-icon.png`, `favicon.ico`, `opengraph-image.png`, `twitter-image.png`, `public/icon-*.png`) are one pixel-art ₿ in Arcade's colors, made by `scripts/brand-images.mjs` and committed. After changing the look, run it again in Docker: `server/dev shell node site/scripts/brand-images.mjs`.
+      - Keep the FAQ and `llms.txt` true to the tutorial and the page, with the same copy rules (no 10%, lottery or earnings claims).
     - **Then the wallet setup** (`components/wallet-setup.js`): until the device has a payout address, there is no mine button at all. It offers three ways: create a wallet (`components/recovery-phrase.js`, with a "saved it" confirmation), upload a file (`readWalletFile` in `lib/backup.js`) or paste an address. The miner's "Change" returns to it.
     - **UI:** shadcn/ui components in plain JS (`components/ui/`, `components.json`, `cn` in `lib/utils.js`, `@/` imports through `jsconfig.json`) on Tailwind CSS v4 (`postcss.config.mjs`, `app/globals.css`), with GSAP for the motion. No daisyUI, which fights shadcn's theme.
     - **Themes:** `lib/themes.js` lists them (Arcade is the default, on `<html data-theme>`), `app/themes.css` styles them, and `components/theme-picker.js` switches them.
@@ -88,6 +93,7 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
 The page shows a new wallet's 12 words, and the site promises they never leave the device. So `site/lib/analytics.js` sends only what the site chooses:
 - **Never re-enable page-reading features:** autocapture, session replay, heatmaps, surveys, exception autocapture (it loads a script), remote config (`advanced_disable_flags`), or external scripts (`disable_external_dependency_loading`).
 - **Events are explicit:** `track(name, props)` calls, page views and uncaught errors (`posthog.captureException` on the window's error events).
+- **posthog-js loads late:** `startAnalytics` imports it (its own chunk) after the page has shown, so it doesn't hold up the first paint. Calls made while it loads (`track`, errors) wait in a queue and are sent once it has started.
 - **Props never carry words or addresses.** `before_send` (`prepareEvent`) also replaces every Bitcoin address with `[address]` and adds `app: "project-tau"` to every event. The PostHog project (702597) is Project Tau's own; `app` still marks every event, the health event's included.
 - **Keys:** only the public `phc_` project key goes in config (the site's `POSTHOG_KEY`, the payout Worker's `TAU_POSTHOG_KEY`). A personal API key (`phx_`) never goes in either Worker, their settings or the repository. `server/test/config.test.js` checks both wrangler files.
 - **Tests:**

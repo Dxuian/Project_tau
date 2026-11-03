@@ -11,6 +11,8 @@ export default {
   // One screen now: the old pages lead to it (the address is remembered on the device, not in the URL).
   async redirects() {
     return [
+      // One address for search engines and links: www goes to the bare domain.
+      { source: '/:path*', has: [{ type: 'host', value: 'www.bitrush.online' }], destination: 'https://bitrush.online/:path*', permanent: true },
       { source: '/wallet', destination: '/', permanent: false },
       { source: '/mine/:address', destination: '/', permanent: false },
     ];

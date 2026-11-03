@@ -1,8 +1,7 @@
 // The site's name, Bitrush, with its B drawn as Bitcoin's ₿ in the theme's font (.btc-b in
 // app/globals.css). Never translated; read as "Bitrush".
+import { NAME } from '@/lib/site';
 import { cn } from '@/lib/utils';
-
-const NAME = 'Bitrush';
 
 /** "₿itrush", for a heading or the logo (`letter` alone: just the ₿). */
 export default function Wordmark({ letter = false, className }) {

@@ -58,6 +58,7 @@ The site is called **Bitrush** (bitrush.online), written with its B as Bitcoin's
   - mining as guessing, with a try-it guess (a few SHA-256 hashes in the browser, sent nowhere), then what mining here does and when a payout arrives.
 
   Skipped or finished, the device remembers (`localStorage` `tau.tutorial`) and it doesn't open by itself again. **See tutorial** on the miner opens it again, over the miner.
+- **Search engines and link previews:** a canonical address (bitrush.online; www redirects to it), a description, keywords, Open Graph and Twitter tags with a share image, structured data (the site, the app, and an FAQ in the tutorial's words), icons, a manifest, `robots.txt`, `sitemap.xml` and `llms.txt`. `server/site/scripts/brand-images.mjs` draws the icons and the share image.
 - **Then, the wallet setup.** Until the device has a payout address, only this shows. The miner appears once one of these is done:
   - **create a wallet**: its 12 words are shown once, with download, copy and share. "Continue to miner" is enabled only after "I've saved my recovery phrase";
   - **upload a wallet**: the backup `.txt`, or a `.json` with `mnemonic` or `address`;

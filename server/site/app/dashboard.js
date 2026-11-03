@@ -128,18 +128,22 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
           </div>
         </header>
 
-        {view === 'loading' && <div aria-hidden className="mx-auto mt-10 h-64 w-full max-w-5xl animate-pulse rounded-2xl border bg-card" />}
+        {view === 'loading' && (
+          <main aria-busy="true" className="flex flex-1 justify-center">
+            <div aria-hidden className="mx-auto mt-10 h-64 w-full max-w-5xl animate-pulse rounded-2xl border bg-card" />
+          </main>
+        )}
         {view === 'tutorial' && (
-          <div className="flex flex-1 items-start justify-center py-4 sm:py-8 lg:items-center lg:pb-24">
+          <main className="flex flex-1 items-start justify-center py-4 sm:py-8 lg:items-center lg:pb-24">
             <Card {...reveal(1)} className="reveal w-full max-w-xl">
               <CardContent>
                 <Tutorial step={tutorialStep} onStep={setTutorialStep} onClose={closeTutorial} finishLabel={saved.address ? 'Go to the miner' : 'Set up my wallet'} />
               </CardContent>
             </Card>
-          </div>
+          </main>
         )}
         {view === 'setup' && (
-          <div className="flex flex-1 items-start justify-center py-4 sm:py-8 lg:items-center lg:pb-24">
+          <main className="flex flex-1 items-start justify-center py-4 sm:py-8 lg:items-center lg:pb-24">
             <WalletSetup
               network={network}
               onDone={(address, source) => {
@@ -148,7 +152,7 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
               }}
               onCancel={saved.address ? () => setChanging(false) : null}
             />
-          </div>
+          </main>
         )}
         {view === 'miner' && (
         <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
