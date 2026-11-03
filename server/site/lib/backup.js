@@ -3,7 +3,7 @@
 // address, public). The upload accepts either, or a .json with words or an address.
 export function backupText(wallet) {
   return [
-    'Project Tau wallet backup',
+    'Bitrush wallet backup',
     "Anyone who has these words can spend this wallet's bitcoin. Keep them private.",
     '',
     `Words: ${wallet.mnemonic}`,
@@ -15,7 +15,7 @@ export function backupText(wallet) {
 }
 
 export function backupFileName(wallet) {
-  return `tau-wallet-${wallet.address.slice(0, 14)}.txt`;
+  return `bitrush-wallet-${wallet.address.slice(0, 14)}.txt`;
 }
 
 /** The address file: { address, network } as JSON. No words in it. */
@@ -23,7 +23,7 @@ export function addressFile(address, network) {
   return `${JSON.stringify({ address, network }, null, 2)}\n`;
 }
 
-export const ADDRESS_FILE_NAME = 'tau-address.json';
+export const ADDRESS_FILE_NAME = 'bitrush-address.json';
 
 /** An error whose message is ours (fixed text, never the file's content), with a reason for analytics. */
 export function fileError(message, reason) {

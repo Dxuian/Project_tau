@@ -1,5 +1,5 @@
 'use client';
-// Project Tau on one screen. On a first visit: the tutorial (components/tutorial.js).
+// Bitrush on one screen. On a first visit: the tutorial (components/tutorial.js).
 // Then, until the visitor has a payout address: the wallet setup
 // (components/wallet-setup.js). Then the miner, where "See tutorial" opens it again. Left: the rig (the
 // mine button, the hashrate, the stats, the speed) and the live graph. Right: the
@@ -16,6 +16,7 @@ import PayoutCard from '@/components/payout-card';
 import ThemePicker from '@/components/theme-picker';
 import Tutorial from '@/components/tutorial';
 import WalletSetup from '@/components/wallet-setup';
+import Wordmark from '@/components/wordmark';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -95,11 +96,16 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
       <div className={cn('mx-auto flex h-full max-w-[1480px] flex-col gap-4 p-4 sm:p-5 lg:p-6', view !== 'miner' && 'min-h-dvh')}>
         <header {...reveal(0)} className="reveal flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary font-display text-xl font-black text-primary-foreground shadow-[0_0_32px_-6px] shadow-primary/70">
-              τ
+            <div
+              aria-hidden
+              className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary font-display text-xl font-black text-primary-foreground shadow-[0_0_32px_-6px] shadow-primary/70"
+            >
+              <Wordmark letter />
             </div>
             <div className="min-w-0 leading-tight">
-              <h1 className="truncate font-display text-base font-semibold tracking-tight">Project Tau</h1>
+              <h1 className="truncate font-display text-base font-semibold tracking-tight">
+                <Wordmark />
+              </h1>
               <p className="truncate text-xs text-muted-foreground">Mine Bitcoin in your browser.</p>
             </div>
           </div>

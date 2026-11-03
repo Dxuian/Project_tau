@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mine BTC — 26 themes</title>
+<title>Bitrush — 26 themes</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=Barlow+Condensed:wght@500;700&family=Bebas+Neue&family=Chakra+Petch:wght@400;600&family=Courier+Prime:wght@400;700&family=DM+Serif+Display&family=IBM+Plex+Serif:wght@400;600&family=Orbitron:wght@500;700&family=Playfair+Display:wght@500;700&family=Press+Start+2P&family=Rubik:wght@400;500;700&family=Space+Mono:wght@400;700&family=VT323&display=swap" rel="stylesheet">
@@ -28,6 +28,10 @@ body.focused .app:not(.is-focus){display:none}
 .app-top{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);position:relative;z-index:3}
 .brand{display:flex;align-items:baseline;gap:8px;font-family:var(--font-display,inherit);font-size:var(--brand-size,1.1rem);line-height:1.1}
 .idx{font-size:.7rem;color:var(--muted);font-family:var(--font-mono,monospace)}
+/* The ₿ of "Bitrush": the theme's own B with Bitcoin's two strokes (the fonts here have no ₿). */
+.btc-b{position:relative;display:inline-block;text-box:trim-both cap alphabetic}
+.btc-b::before,.btc-b::after{content:"";position:absolute;left:30%;right:34%;height:.15em;border-inline:.09em solid currentColor}
+.btc-b::before{bottom:100%}.btc-b::after{top:100%}
 .tabs{display:none;gap:4px;margin-left:auto}
 .app.ready .tabs{display:flex}
 .tabs button{font:inherit;font-size:var(--ui,.9rem);background:none;color:var(--muted);border:1px solid transparent;padding:4px 10px;border-radius:var(--radius,6px);cursor:pointer}
@@ -349,7 +353,7 @@ input[type=text],select{font:inherit;font-size:var(--ui,.9rem);color:var(--ink);
 <body>
 <div class="shell">
   <header>
-    <h1>Mine BTC — 26 themes, one screen</h1>
+    <h1>Bitrush — 26 themes, one screen</h1>
     <p>Each panel is its own app. On a first visit it opens with a short tutorial on how Bitcoin mining works; this browser remembers once it's been seen, and "See tutorial" on the miner opens it again. Then it asks you to set up a wallet: create a new 12-word phrase (copy or download it) or upload a wallet / address. Then you can start and stop mining. Hashing runs in your browser as a demo and isn't connected to any pool. Tap ⤢ to open any panel full size.</p>
     <button class="reset" type="button" id="reset-tour">Reset the tutorial and reload</button>
   </header>
@@ -359,7 +363,7 @@ input[type=text],select{font:inherit;font-size:var(--ui,.9rem);color:var(--ink);
 <template id="tpl">
 <section class="app">
   <div class="app-top">
-    <div class="brand"><b></b><span class="idx"></span></div>
+    <div class="brand"><b translate="no" class="notranslate" role="img" aria-label="Bitrush"><span class="btc-b" aria-hidden="true">B</span><span aria-hidden="true">itrush</span></b><span class="idx"></span></div>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="mine" aria-selected="true">Mine</button>
       <button role="tab" data-tab="wallet" aria-selected="false">Wallet</button>
@@ -672,7 +676,7 @@ function setup(app,theme,i){
 }
 
 const miners=THEMES.map(([id,name],i)=>{const node=tpl.content.firstElementChild.cloneNode(true);
-  node.dataset.theme=id;node.querySelector('.brand b').textContent=name;node.querySelector('.idx').textContent=(i+1)+'/'+THEMES.length;
+  node.dataset.theme=id;node.querySelector('.idx').textContent=name+' '+(i+1)+'/'+THEMES.length;
   node.setAttribute('aria-label',name+' theme');grid.append(node);return setup(node,id,i)});
 (function loop(){for(const m of miners)m.step();requestAnimationFrame(loop)})();
 document.getElementById('reset-tour').addEventListener('click',()=>{try{localStorage.removeItem(TOUR_KEY)}catch{}location.reload()});

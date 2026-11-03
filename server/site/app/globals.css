@@ -88,6 +88,30 @@
   }
 }
 
+/* The ₿ of "Bitrush" (components/wordmark.js): the theme's own B with Bitcoin's two strokes,
+   drawn here because the themes' fonts (Latin only) have no ₿. text-box trims the letter's box
+   to its capital, so the strokes sit just above and below it in every font. */
+.btc-b {
+  position: relative;
+  display: inline-block;
+  text-box: trim-both cap alphabetic;
+}
+.btc-b::before,
+.btc-b::after {
+  content: '';
+  position: absolute;
+  left: 30%;
+  right: 34%;
+  height: 0.15em;
+  border-inline: 0.09em solid currentColor;
+}
+.btc-b::before {
+  bottom: 100%;
+}
+.btc-b::after {
+  top: 100%;
+}
+
 /* Cards come in one after another (style="--i: n"); no JavaScript needed, so nothing flashes. */
 .reveal {
   animation: reveal 0.75s cubic-bezier(0.2, 0.75, 0.2, 1) both;

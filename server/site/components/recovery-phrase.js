@@ -42,7 +42,7 @@ export default function RecoveryPhrase({ wallet }) {
     if (!phone) return setSharing('text');
     setSharing(null);
     try {
-      await navigator.share({ title: 'Project Tau wallet backup', text });
+      await navigator.share({ title: 'Bitrush wallet backup', text });
     } catch {
       // cancelled
     }

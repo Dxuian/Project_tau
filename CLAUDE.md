@@ -8,7 +8,7 @@ The top level holds only these; don't add top-level folders or files:
 - `tau-crypto/` (the library);
 - `server/` (everything deployed, with its tests and tooling);
 - `README.md`, `CLAUDE.md`, `docker-compose.yml` (server/'s containers) and `.gitignore`;
-- `mine-btc-24-themes.html`: the owner's design prototype (one standalone page, never deployed or built). It has the 26 themes, the setup-first flow and the visitor's tutorial on how Bitcoin mining works, which opens on a first visit (`localStorage` `tau.tutorial`) and again from "See tutorial" on the miner. Its hashing is a demo that connects to nothing. It loads Google Fonts, which the site must never do.
+- `mine-btc-24-themes.html`: the owner's design prototype (one standalone page, never deployed or built). Its panels are headed "₿itrush" (the same `.btc-b`), with the theme's name beside it. It has the 26 themes, the setup-first flow and the visitor's tutorial on how Bitcoin mining works, which opens on a first visit (`localStorage` `tau.tutorial`) and again from "See tutorial" on the miner. Its hashing is a demo that connects to nothing. It loads Google Fonts, which the site must never do.
 
 There is no upstream clone. `tau-crypto/dev vendor` fetches the pinned cpuminer-opt into the library's cache volume. There is no `.github/`: the alerts live in PostHog (GitHub's scheduled runs were hours apart).
 
@@ -59,6 +59,7 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
       - `d1-stores.js` with its own `schema.js` and `migrations/`;
       - `wrangler.toml`, with a cron every 15 minutes for payouts, the share purge and the health event. It has `global_fetch_strictly_public` too, so the health check can fetch the site.
   - `site/`: the website, Next.js 16 App Router, plain JS: **one screen** (`app/page.js` renders `app/dashboard.js`). `/wallet` and `/mine/:address` redirect to it (`next.config.mjs`).
+    - **Its name is Bitrush** (the owner's domain: bitrush.online), shown by `components/wordmark.js` as "₿itrush". The themes' fonts (Latin only) have no ₿, so `.btc-b` (`app/globals.css`) draws it: the theme's own B with two strokes, placed with `text-box`. The repository, the library and the analytics `app` (`project-tau`) keep their names.
     - **A first visit opens with the tutorial** (`components/tutorial.js`), which explains how Bitcoin mining works to a visitor new to it, in plain words. It shows until it's closed once (skipped or finished), which `useTutorial` remembers in `localStorage` (`tau.tutorial`). "See tutorial" in the miner's header opens it again in a dialog, and mining carries on underneath.
       - Keep its claims true: the numbers (3.125 BTC, about 19 zeros, 100 confirmations) date from 2026.
       - Its guess game hashes in the browser (Web Crypto) and sends nothing.

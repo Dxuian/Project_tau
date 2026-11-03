@@ -9,7 +9,7 @@ import './themes.css';
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Project Tau: mine Bitcoin in your browser',
+  title: 'Bitrush: mine Bitcoin in your browser',
   description: 'Mine Bitcoin in your browser.',
 };
 
