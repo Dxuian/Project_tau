@@ -50,11 +50,10 @@ Slot N (one an hour) is receive index N of our wallet: `1 + whole hours since TA
 ## The website (`server/site`)
 
 **One screen**, in 26 themes: Arcade by default; the theme button switches and remembers the choice on the device. Built with shadcn/ui on Tailwind CSS v4, with GSAP for the motion.
-- **A first visit opens with a tutorial** on how Bitcoin mining works, in 5 short steps for someone new to it:
+- **A first visit opens with a tutorial** on how Bitcoin mining works, in 4 short steps for someone new to it:
   - Bitcoin as a decentralized network, and the wallet (the address to share, the 12 words to keep secret);
-  - blocks and mining as guessing, with a try-it guess (a few SHA-256 hashes in the browser, sent nowhere);
-  - the reward: a bank pays its staff to keep its books, and Bitcoin pays its miners;
-  - what mining here does, and when a payout arrives.
+  - the reward: a bank pays its staff to keep its books, and Bitcoin pays its miners for each block;
+  - mining as guessing, with a try-it guess (a few SHA-256 hashes in the browser, sent nowhere), then what mining here does and when a payout arrives.
 
   Skipped or finished, the device remembers (`localStorage` `tau.tutorial`) and it doesn't open by itself again. **See tutorial** on the miner opens it again, over the miner.
 - **Then, the wallet setup.** Until the device has a payout address, only this shows. The miner appears once one of these is done:

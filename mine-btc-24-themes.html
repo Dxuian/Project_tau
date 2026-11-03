@@ -121,7 +121,7 @@ input[type=text],select{font:inherit;font-size:var(--ui,.9rem);color:var(--ink);
 .tour-guess p{margin:0}
 .tour-best{font-size:var(--small,.9rem);font-weight:600}
 .tour-best:empty{display:none}
-.tour-art[hidden]{display:none}
+.tour-art[hidden],.tour-after[hidden]{display:none}
 .tour-art .ft{font-family:var(--font-display,inherit);font-weight:700}
 .tour-nav{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .tour-dots{display:flex;gap:6px}
@@ -381,6 +381,7 @@ input[type=text],select{font:inherit;font-size:var(--ui,.9rem);color:var(--ink);
       <div class="row"><button class="btn tg-one">Guess</button><button class="btn btn-ghost tg-many">Guess 1,000 times</button></div>
       <p class="tour-best" aria-live="polite"></p>
     </div>
+    <div class="tour-body tour-after" hidden></div>
     <div class="tour-nav"><div class="tour-dots" aria-hidden="true"></div><div class="row"><button class="btn btn-ghost tour-back">Back</button><button class="btn tour-next">Next</button></div></div>
   </div>
 
@@ -483,20 +484,18 @@ const NODES=[[50,30],[110,14],[160,48],[232,26],[72,84],[140,90],[214,80]];
 const LINKS=[[0,1],[1,2],[2,3],[1,3],[0,4],[4,5],[5,2],[0,2],[5,6],[6,3],[2,6]];
 const TOUR=[
   {title:'Bitcoin has no boss',
-   body:"<p>Bitcoin is money run by thousands of computers around the world, not a bank. They all keep the same record and check every payment. That's what <b>decentralized</b> means: no one is in charge, and no one can change the record on their own.</p><p class=\"hint\">A one-minute tour. You can skip it, and open it again any time from the miner.</p>",
+   body:"<p>Bitcoin is money run by thousands of computers around the world, not a bank. They all keep the same record of payments, the <b>blockchain</b>, and check every new one. That's what <b>decentralized</b> means: no one is in charge, and no one can change the record on their own.</p><p class=\"hint\">A one-minute tour. You can skip it, and open it again any time from the miner.</p>",
    art:`<svg viewBox="0 0 280 104">${LINKS.map(([a,b])=>`<line class="ln" x1="${NODES[a][0]}" y1="${NODES[a][1]}" x2="${NODES[b][0]}" y2="${NODES[b][1]}"/>`).join('')}${NODES.map(([x,y])=>`<circle class="nd" cx="${x}" cy="${y}" r="10"/><rect class="ac" x="${x-4}" y="${y-4}" width="8" height="8" rx="1.5"/>`).join('')}</svg>`},
   {title:'Your wallet: an address and 12 words',
    body:"<p>Your <b>address</b> is like an account number. It's safe to share: it's where bitcoin is sent to you.</p><p>Your <b>12 words</b> are the key. Whoever has them can spend your bitcoin, so keep them secret. They're made in your browser and never leave it.</p>",
    art:`<div class="tour-chips"><div><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><b>Address</b><span>Safe to share</span></div><div><svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M21 12v2"/></svg><b>12 words</b><span>Keep them secret</span></div></div>`},
-  {title:'Blocks and the guessing game',
-   body:"<p>About every 10 minutes, new payments are packed into a <b>block</b>, linked to the one before it. That chain is the <b>blockchain</b>.</p><p>To add the next block, computers race to find a <b>hash</b> that starts with about 19 zeros. There's no shortcut, only guessing. Try it:</p>",
-   guess:true},
   {title:'Why miners get paid',
-   body:"<p>A bank pays its staff to keep its books. Bitcoin has no staff, so it pays its miners instead, for adding each new block.</p><p>The winner gets 3.125 new bitcoin, plus the fees from the payments inside. That's the only way new bitcoin is made.</p>",
+   body:"<p>A bank pays its staff to keep its books. Bitcoin has no staff, so it pays its miners instead, for adding each new <b>block</b> of payments, about every 10 minutes.</p><p>Miners race to add each block, and the winner gets 3.125 new bitcoin, plus the fees from the payments inside. That's the only way new bitcoin is made.</p>",
    art:`<svg viewBox="0 0 280 104">${block(40)}<path class="ln" d="M104 52h52M146 42l10 10-10 10"/>${coin(200,34)}${sparkle(246,22,.8)}${sparkle(160,88,.6)}</svg>`},
-  {title:'Mining here',
-   body:"<p>Press <b>Mine BTC</b> to start, and again to stop. You'll see your speed and your <b>shares</b>: close calls that show real work.</p><p>If you find a block, the payout goes to your address about 100 blocks (around 17 hours) later.</p><p class=\"hint\">Mining can warm up your device. Keep this tab open while you mine, and stop whenever you like.</p>",
-   art:`<svg viewBox="0 0 280 104"><circle class="ac" cx="80" cy="52" r="40"/><circle class="rg" cx="80" cy="52" r="32"/><path class="ai" d="M70 34v36l30-18z"/>${[22,36,30,48,40,58,50].map((h,k)=>`<rect class="ac" x="${140+k*16}" y="${88-h}" width="10" height="${h}" rx="2" opacity="${.35+k*.1}"/>`).join('')}<path class="ln" d="M134 88h120"/></svg>`}
+  {title:'Mining is a guessing game',
+   body:"<p>To win a block, a computer has to find a <b>hash</b> that starts with about 19 zeros. There's no shortcut, only guessing. Try it:</p>",
+   guess:true,
+   after:"<p>Press <b>Mine BTC</b> and your browser starts guessing, until you press it again. Its close calls show up as <b>shares</b>. If it finds a block, the payout reaches your address about 100 blocks (around 17 hours) later.</p><p class=\"hint\">Mining can warm up your device. Keep this tab open while you mine, and stop whenever you like.</p>"}
 ];
 
 const THEMES=[["ledger","Ledger"],["vault","Vault"],["arcade","Arcade"],["blueprint","Blueprint"],["terminal","Terminal"],["neon","Neon"],["swiss","Swiss"],["gold","Gold"],["comic","Comic"],["forest","Forest"],["brutal","Brutal"],["sunset","Sunset"],["ocean","Ocean"],["candy","Candy"],["copper","Copper"],["frost","Frost"],["volcano","Volcano"],["royal","Royal"],["mint","Mint"],["cyber","Cyber"],["lottery","Lottery"],["royale","Grand Casino"],["casinobtc","₿ Bitcoin Casino"],["deluxe","Deluxe ₿ Casino"],["tau","Tau"],["tau-light","Tau Light"]];
@@ -635,7 +634,7 @@ function setup(app,theme,i){
     $('.tour-count').textContent=(tourAt+1)+' / '+TOUR.length;
     $('.tour-art').innerHTML=s.art||'';$('.tour-art').hidden=!s.art;
     $('.tour-title').textContent=s.title;$('.tour-body').innerHTML=s.body;
-    $('.tour-guess').hidden=!s.guess;$('.tour-back').hidden=tourAt===0;$('.tour-skip').hidden=last;
+    $('.tour-guess').hidden=!s.guess;$('.tour-after').innerHTML=s.after||'';$('.tour-after').hidden=!s.after;$('.tour-back').hidden=tourAt===0;$('.tour-skip').hidden=last;
     $('.tour-next').textContent=!last?'Next':app.classList.contains('ready')?'Back to the miner':'Set up my wallet';
     dots.forEach((d,k)=>d.classList.toggle('on',k===tourAt))}
   function openTour(){tourAt=0;renderTour();show('tour')}

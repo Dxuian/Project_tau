@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const LINE = { className: 'fill-none stroke-muted-foreground', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
+const TEXT = 'space-y-2.5 text-sm leading-relaxed [&_b]:font-semibold';
 const NODES = [[50, 30], [110, 14], [160, 48], [232, 26], [72, 84], [140, 90], [214, 80]];
 const LINKS = [[0, 1], [1, 2], [2, 3], [1, 3], [0, 4], [4, 5], [5, 2], [0, 2], [5, 6], [6, 3], [2, 6]];
 
@@ -70,8 +71,8 @@ export const STEPS = [
     body: (
       <>
         <p>
-          Bitcoin is money run by thousands of computers around the world, not a bank. They all keep the same record and check every payment. That&apos;s what{' '}
-          <b>decentralized</b> means: no one is in charge, and no one can change the record on their own.
+          Bitcoin is money run by thousands of computers around the world, not a bank. They all keep the same record of payments, the <b>blockchain</b>, and check
+          every new one. That&apos;s what <b>decentralized</b> means: no one is in charge, and no one can change the record on their own.
         </p>
         <p className="text-muted-foreground">A one-minute tour. You can skip it, and open it again any time from the miner.</p>
       </>
@@ -97,20 +98,6 @@ export const STEPS = [
     ),
   },
   {
-    title: 'Blocks and the guessing game',
-    guess: true,
-    body: (
-      <>
-        <p>
-          About every 10 minutes, new payments are packed into a <b>block</b>, linked to the one before it. That chain is the <b>blockchain</b>.
-        </p>
-        <p>
-          To add the next block, computers race to find a <b>hash</b> that starts with about 19 zeros. There&apos;s no shortcut, only guessing. Try it:
-        </p>
-      </>
-    ),
-  },
-  {
     title: 'Why miners get paid',
     art: (
       <Art>
@@ -123,30 +110,28 @@ export const STEPS = [
     ),
     body: (
       <>
-        <p>A bank pays its staff to keep its books. Bitcoin has no staff, so it pays its miners instead, for adding each new block.</p>
-        <p>The winner gets 3.125 new bitcoin, plus the fees from the payments inside. That&apos;s the only way new bitcoin is made.</p>
+        <p>
+          A bank pays its staff to keep its books. Bitcoin has no staff, so it pays its miners instead, for adding each new <b>block</b> of payments, about every 10
+          minutes.
+        </p>
+        <p>Miners race to add each block, and the winner gets 3.125 new bitcoin, plus the fees from the payments inside. That&apos;s the only way new bitcoin is made.</p>
       </>
     ),
   },
   {
-    title: 'Mining here',
-    art: (
-      <Art>
-        <circle className="fill-primary" cx={80} cy={52} r={40} />
-        <circle className="fill-none stroke-primary-foreground opacity-35" strokeWidth={2} cx={80} cy={52} r={32} />
-        <path className="fill-primary-foreground" d="M70 34v36l30-18z" />
-        {[22, 36, 30, 48, 40, 58, 50].map((h, k) => (
-          <rect key={k} className="fill-primary" x={140 + k * 16} y={88 - h} width={10} height={h} rx={2} opacity={0.35 + k * 0.1} />
-        ))}
-        <path {...LINE} d="M134 88h120" />
-      </Art>
-    ),
+    title: 'Mining is a guessing game',
+    guess: true,
     body: (
+      <p>
+        To win a block, a computer has to find a <b>hash</b> that starts with about 19 zeros. There&apos;s no shortcut, only guessing. Try it:
+      </p>
+    ),
+    after: (
       <>
         <p>
-          Press <b>Mine BTC</b> to start, and again to stop. You&apos;ll see your speed and your <b>shares</b>: close calls that show real work.
+          Press <b>Mine BTC</b> and your browser starts guessing, until you press it again. Its close calls show up as <b>shares</b>. If it finds a block, the payout
+          reaches your address about 100 blocks (around 17 hours) later.
         </p>
-        <p>If you find a block, the payout goes to your address about 100 blocks (around 17 hours) later.</p>
         <p className="text-muted-foreground">Mining can warm up your device: the Speed slider turns it down.</p>
       </>
     ),
@@ -249,8 +234,9 @@ export default function Tutorial({ step, onStep, onClose, finishLabel, Title = '
             </div>
           )}
           <Title className="font-display text-xl leading-snug font-semibold tracking-tight sm:text-2xl">{s.title}</Title>
-          <div className="space-y-2.5 text-sm leading-relaxed [&_b]:font-semibold">{s.body}</div>
+          <div className={TEXT}>{s.body}</div>
           {s.guess && <GuessGame />}
+          {s.after && <div className={TEXT}>{s.after}</div>}
         </div>
       </div>
       <div className="flex items-center justify-between gap-3">
