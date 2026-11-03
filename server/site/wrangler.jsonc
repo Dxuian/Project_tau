@@ -15,7 +15,13 @@
   // subdomain, and Cloudflare refuses fetches from one Worker to another there
   // (error 1042) unless they go out as public requests.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  // Served on tau-site.deathxunnat.workers.dev only, without per-version preview URLs.
+  // Served on bitrush.online (the owner's domain, its DNS on Cloudflare), www.bitrush.online and
+  // tau-site.deathxunnat.workers.dev, without per-version preview URLs. Custom domains: Cloudflare
+  // makes their DNS records and certificates, so the zone has no record of its own for either.
+  "routes": [
+    { "pattern": "bitrush.online", "custom_domain": true },
+    { "pattern": "www.bitrush.online", "custom_domain": true }
+  ],
   "workers_dev": true,
   "preview_urls": false,
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },

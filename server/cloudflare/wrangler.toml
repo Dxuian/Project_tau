@@ -40,8 +40,8 @@ TAU_STORAGE = "tidb"
 TAU_DB_NAME = "tau"
 # Ordinary shares older than this are deleted by the cron run below; blocks and payouts are kept.
 TAU_SHARE_RETENTION_DAYS = "30"
-# The site (server/site, the Worker tau-site).
-TAU_ORIGINS = "https://tau-site.deathxunnat.workers.dev"
+# The site (server/site, the Worker tau-site): bitrush.online, its www, and its workers.dev address.
+TAU_ORIGINS = "https://bitrush.online, https://www.bitrush.online, https://tau-site.deathxunnat.workers.dev"
 # Each cron run sends a health event (health.js) to PostHog, whose alerts fire when one
 # reports a problem or they stop. A project key (phc_, write-only, public like the site's);
 # never a personal phx_ key. The run also checks the site's /api/address.

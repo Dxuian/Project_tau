@@ -77,6 +77,7 @@ Five alerts in Project Tau's PostHog project (702597, US Cloud), each named for 
     - The library is copied in, not linked: `scripts/copy-library.mjs` copies `tau-crypto/dist` (on every build) to `lib/tau-crypto/` (imported as `tau-crypto/*` through `jsconfig.json`) and `public/tau-crypto/` (the miner, which the mine page loads at run time, so it is never bundled). The app needs nothing outside its folder, which OpenNext requires.
     - Server code reads `PAYOUT_API_URL`, `BRIDGE_URL`, `POOL_URL`, `NETWORK`, `POSTHOG_KEY` and `POSTHOG_HOST` at request time (the root layout is `force-dynamic` for this). `wrangler.jsonc` and `open-next.config.ts` are the Cloudflare (OpenNext) target; Vercel needs nothing extra.
     - `wrangler.jsonc` has `global_fetch_strictly_public`: both Workers are on the same workers.dev subdomain, and without it the site's calls to the payout Worker fail (error 1042).
+    - The site is served on bitrush.online and www.bitrush.online (custom domains in `wrangler.jsonc`'s `routes`; the zone's DNS is on Cloudflare, the domain registered at Namecheap) and on its workers.dev address. The payout Worker's `TAU_ORIGINS` lists all three (its WebSocket refuses other origins).
   - `test/`: server and site tests. `docker/bitcoind/`: the regtest node image.
 - Never re-add a facade that mixes client and server exports (the old `btc.js`): it breaks `'use client'` / `'use server'`.
 - Server code imports the library's committed `dist/`. After changing library code, run `tau-crypto/dev build` and commit `dist/`.
