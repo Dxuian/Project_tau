@@ -47,7 +47,7 @@ TAU_ORIGINS = "https://bitrush.online, https://www.bitrush.online, https://tau-s
 # never a personal phx_ key. The run also checks the site's /api/address.
 TAU_POSTHOG_KEY = "phc_xSKFvnfVqCRCa6cUY6ahrpxxaaHas6Qc6LbgtvuoFCwn"
 TAU_POSTHOG_HOST = "https://us.i.posthog.com"
-TAU_SITE_URL = "https://tau-site.deathxunnat.workers.dev"
+TAU_SITE_URL = "https://bitrush.online"
 
 # Every 15 minutes: pay every visitor with a mature block, purge old shares, and send
 # the health event (PostHog's health alert expects one every hour at least).
