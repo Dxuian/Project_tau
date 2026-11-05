@@ -103,6 +103,23 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   );
 
   step('site up');
+  // The miner is served minified (scripts/copy-library.mjs), its worker's inlined source too,
+  // with source maps; the library's server-only entries aren't served at all.
+  const served = async (p) => {
+    const r = await fetch(`${site}/tau-crypto/${p}`);
+    return { status: r.status, text: await r.text() };
+  };
+  const minerIndex = await served('index.js');
+  assert.equal(minerIndex.status, 200);
+  assert.match(minerIndex.text, /\/\/# sourceMappingURL=index\.js\.map\n$/);
+  const chunks = [...minerIndex.text.matchAll(/["']\.\/(chunks\/[^"']+\.js)["']/g)].map((m) => m[1]);
+  const code = await Promise.all(chunks.map(async (c) => (await served(c)).text));
+  const withWorker = code.find((c) => c.includes('postMessage') && c.includes('use strict'));
+  assert.ok(withWorker, 'the chunk with the mining worker');
+  assert.ok(!/\\n\s+\/\/ src\//.test(withWorker), "the worker's inlined source is minified (no per-file comments)");
+  assert.ok(code.every((c) => c.split('\n').length < 60), 'every chunk is minified');
+  assert.equal((await served('index.js.map')).status, 200);
+  for (const p of ['payouts.js', 'bridge.js', 'wallet.js']) assert.equal((await served(p)).status, 404, `${p} isn't served`);
   browser = await chromium.launch({ args: [...DESKTOP_ARGS] });
   const context = await desktopContext(browser, { acceptDownloads: true });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: site });

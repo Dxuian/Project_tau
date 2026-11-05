@@ -77,7 +77,7 @@ The site is called **Bitrush** (bitrush.online), written with its B as Bitcoin's
   - **this hour's mining address**, rendered on the server, with a countdown to the next one;
   - **your blocks**: each block you found, waiting for 100 confirmations (with progress) or paid (with the transaction). Confetti when one appears.
 - **Old links:** `/wallet` and `/mine/<address>` redirect to the one screen.
-- **The library is copied in at build time.** `tau-crypto/dist` goes to `lib/tau-crypto/` (what the page imports) and to `public/tau-crypto/` (the miner). The page loads the miner only when you press Start, so it is never bundled.
+- **The library is copied in at build time.** `tau-crypto/dist` goes to `lib/tau-crypto/` (what the page imports) and to `public/tau-crypto/` (the miner). The page loads the miner only when you press Start, so it is never bundled. The miner's files are minified on the way (only the ones it loads, its worker's code too, with source maps): its JavaScript is 25% smaller gzipped, and the hash rate is the same, since the WASM and the GPU shader are left as they are.
 - **Analytics (PostHog)**, when `POSTHOG_KEY` is set (`lib/analytics.js`). Only what the site sends itself:
   - page views (`/` only now; Bitcoin addresses are cut out of everything anyway);
   - uncaught errors, for PostHog's error tracking. The browser source maps are served next to the scripts (`next.config.mjs`), so stack traces resolve without an upload step;
