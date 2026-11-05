@@ -66,7 +66,7 @@ The site is called **Bitrush** (bitrush.online), written with its B as Bitcoin's
 - **Themes:** the 24 of the theme set (Ledger, Vault, Blueprint, Terminal, Neon, … the casinos), plus Tau, the earlier look, dark and light. Each has its colors, fonts, background and its own mine button. The fonts are self-hosted from npm (`@fontsource`), so the page never calls Google Fonts.
 - **Left, the miner:**
   - the **mine button**: nothing loads or mines until it's pressed; pressed again, it stops. Mining pauses when the tab is hidden;
-  - your hashrate (big, animated), shares, uptime, threads, the block being mined, and a speed slider;
+  - your hashrate (big, animated), shares, uptime, threads, the block being mined, and a speed slider from 0 to 100% (it throttles the CPU and the GPU alike; 0 pauses);
   - a **live graph** of the last 3 minutes. Switch it off and the CPU it used goes to mining.
 - **Right, the details:**
   - **your payout address**, with copy, **download** (an address file, `tau-address.json`, to upload on another device) and **change** (back to the setup).

@@ -28,7 +28,6 @@ import { countdown, duration } from '@/lib/format';
 import { useHour, useMiner, usePayouts, usePreference, useSavedAddress, useTick, useTutorial } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
 
-const SPEEDS = { 25: 'Quarter', 50: 'Half', 75: '75%', 100: 'Full' };
 const STATES = {
   idle: ['Idle', 'bg-muted-foreground'],
   starting: ['Starting', 'bg-primary live-dot'],
@@ -181,7 +180,7 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
                     {miner.error ? (
                       <span className="text-destructive">{miner.error}</span>
                     ) : miner.state === 'paused' ? (
-                      'Paused while this tab is hidden.'
+                      miner.speed === 0 ? 'Paused: the speed is 0%.' : 'Paused while this tab is hidden.'
                     ) : blocker && !miner.running ? (
                       <button className="underline underline-offset-2 hover:text-foreground lg:no-underline" onClick={() => document.getElementById('payout')?.scrollIntoView({ behavior: 'smooth' })}>
                         {blocker}
@@ -211,15 +210,19 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
                     </span>
                     <Slider
                       value={[miner.speed]}
-                      min={25}
+                      min={0}
                       max={100}
-                      step={25}
+                      step={1}
                       onValueChange={([v]) => v !== miner.speed && miner.setSpeed(v)}
+                      onValueCommit={([v]) => miner.commitSpeed(v)}
                       thumbLabel="Mining speed"
+                      thumbValueText={miner.speed === 0 ? '0%, paused' : `${miner.speed}% of full speed`}
                       data-testid="speed"
                       className="max-w-xs"
                     />
-                    <span className="w-16 font-mono text-xs">{SPEEDS[miner.speed]}</span>
+                    <output data-testid="speed-value" className="w-12 text-right font-mono text-xs tabular-nums">
+                      {miner.speed}%
+                    </output>
                   </div>
                 </div>
               </CardContent>

@@ -133,6 +133,8 @@ await miner.start();
 // later: miner.pause(), miner.resume(), miner.setThrottle(0.5), miner.stop()
 ```
 
+`throttle` is the fraction of time to idle, 0 (full speed) to 0.99 (1%), for the CPU workers and the GPU alike: after each chunk of work (about 100 ms) a worker idles in proportion. A new job, `setThrottle`, `pause` and `stop` cut an idle short, so even at 1% the miner switches jobs and stops at once.
+
 CLI (cpuminer-style options):
 
 ```sh

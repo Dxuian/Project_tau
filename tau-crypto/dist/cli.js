@@ -3,7 +3,7 @@ import {
   benchmark,
   createMiner,
   listAlgorithms
-} from "./chunks/chunk-GYPOAHJE.js";
+} from "./chunks/chunk-3EIIAUMX.js";
 import {
   detect
 } from "./chunks/chunk-DMFZA2GS.js";
@@ -23,7 +23,7 @@ Mining:
       --backend NAME       force a backend (wasm-avx2, wasm-sse42, wasm-sse41,
                            wasm-sha256-x8, wasm-sha256-x4, node-crypto, js, webgpu)
       --no-gpu             don't use a GPU backend
-      --throttle F         idle fraction 0..0.95 (default 0)
+      --throttle F         idle fraction 0..0.99 (default 0)
       --param-n N          algorithm parameter N (scrypt, yespower...)
       --param-r N          algorithm parameter R
       --param-key KEY      algorithm parameter key (yespower variants)

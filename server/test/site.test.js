@@ -210,6 +210,20 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   await page.locator('canvas[role=img]').waitFor();
   await page.getByTestId('live-graph').click();
   assert.equal(await page.locator('canvas[role=img]').count(), 0, 'graph off: no canvas drawn');
+  // The speed is a number from 0 to 100 (here by keyboard): 0 pauses, any other value mines.
+  const speed = page.getByTestId('speed').getByRole('slider');
+  const shown = async () => (await page.getByTestId('speed-value').innerText()).trim();
+  assert.equal(await shown(), '100%');
+  await speed.focus();
+  await page.keyboard.press('Home');
+  await page.getByTestId('state').getByText('Paused').waitFor();
+  assert.equal(await shown(), '0%');
+  assert.equal(await speed.getAttribute('aria-valuetext'), '0%, paused');
+  await page.keyboard.press('End');
+  await page.keyboard.press('ArrowLeft');
+  await page.getByTestId('state').getByText('Mining').waitFor();
+  assert.equal(await shown(), '99%');
+  assert.equal(await speed.getAttribute('aria-valuenow'), '99');
   await page.getByTestId('stop').click();
   const block = pool.found[before];
   assert.equal(block.user, hour.address, "the pool saw this hour's address, not the visitor's");
@@ -235,7 +249,7 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
     throw new Error(`analytics test error for ${a}`);
   }), address);
   const expected = ['$pageview', 'wallet_created', 'backup_downloaded', 'words_shared', 'words_copied', 'payout_address_chosen', 'wallet_restored'];
-  expected.push('tutorial_closed', 'tutorial_opened', 'theme_changed', 'mining_started', 'mining_stopped', 'payout_checked', 'blocks_seen', '$exception');
+  expected.push('tutorial_closed', 'tutorial_opened', 'theme_changed', 'mining_started', 'mining_speed_changed', 'mining_stopped', 'payout_checked', 'blocks_seen', '$exception');
   const names = () => new Set(ph.events().map((e) => e.event));
   try {
     await until(() => expected.every((n) => names().has(n)), 30_000, 'the analytics events');

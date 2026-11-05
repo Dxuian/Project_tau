@@ -9,6 +9,8 @@ import { track } from './analytics.js';
 
 /** Samples kept for the graph: 3 minutes at one every 2 s (the miner's hashrate event). */
 const SAMPLES = 90;
+/** The library's throttle (the fraction of time to idle) for a speed of 0 to 100 percent. */
+const throttleFor = (percent) => (100 - percent) / 100;
 const SAVED = 'tau.address';
 const TUTORIAL = 'tau.tutorial';
 
@@ -20,7 +22,7 @@ export function useMiner({ address, network, bridgeUrl, pool, minerUrl }) {
   const [engine, setEngine] = useState(null); // { backend, threads, gpu }
   const [job, setJob] = useState(null); // { height, difficulty }
   const [error, setError] = useState('');
-  const [speed, setSpeedValue] = useState(100); // percent of full speed
+  const [speed, setSpeedValue] = useState(100); // percent of full speed, 0 to 100 (0: paused)
   const [startedAt, setStartedAt] = useState(0);
   const miner = useRef(null);
   const last = useRef({ hps: 0, accepted: 0, rejected: 0, startedAt: 0 });
@@ -43,7 +45,7 @@ export function useMiner({ address, network, bridgeUrl, pool, minerUrl }) {
       setSamples([]);
       setShares({ accepted: 0, rejected: 0 });
       last.current = { hps: 0, accepted: 0, rejected: 0, startedAt: 0 };
-      const throttle = (100 - speed) / 100;
+      const throttle = throttleFor(speed);
       try {
         const lib = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ minerUrl);
         const url = `${bridgeUrl}${bridgeUrl.includes('?') ? '&' : '?'}slot=${slot}`;
@@ -69,6 +71,7 @@ export function useMiner({ address, network, bridgeUrl, pool, minerUrl }) {
         setEngine({ backend: stats.backend, threads: stats.threads, gpu: stats.gpu });
         if (stats.height) setJob({ height: stats.height, difficulty: stats.difficulty });
         setState('running');
+        if (speed === 0) m.pause(); // started at 0%: connected, not hashing (its state event says 'paused')
         last.current.startedAt = Date.now();
         setStartedAt(last.current.startedAt);
         track('mining_started', { throttle });
@@ -97,15 +100,21 @@ export function useMiner({ address, network, bridgeUrl, pool, minerUrl }) {
     setStartedAt(0);
   }, []);
 
+  // The library throttles the CPU workers and the GPU alike, down to 1%; 0 pauses.
+  // Applied at every step of a drag; the event is sent once, when it ends (commitSpeed).
   const setSpeed = useCallback((percent) => {
     setSpeedValue(percent);
-    const throttle = (100 - percent) / 100;
-    miner.current?.setThrottle(throttle);
-    track('mining_speed_changed', { throttle });
+    const m = miner.current;
+    if (percent === 0) m?.pause();
+    else {
+      m?.setThrottle(throttleFor(percent));
+      m?.resume();
+    }
   }, []);
+  const commitSpeed = useCallback((percent) => track('mining_speed_changed', { throttle: throttleFor(percent) }), []);
 
   const running = state === 'running' || state === 'starting' || state === 'paused';
-  return { state, running, hps, samples, shares, engine, job, error, speed, setSpeed, startedAt, start, stop };
+  return { state, running, hps, samples, shares, engine, job, error, speed, setSpeed, commitSpeed, startedAt, start, stop };
 }
 
 /** The visitor's blocks: checked when the address is set, every 5 minutes, and on demand. */

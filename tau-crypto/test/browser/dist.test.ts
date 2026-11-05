@@ -42,6 +42,29 @@ window.T = {
     await miner.stop();
     return { shares, errors, stats, after: miner.stats().state };
   },
+  // GPU only (backend 'webgpu'), so totalHashes counts the GPU's hashes: how many in
+  // equal windows at full speed and at 25%, then how long stop() takes while idling at 1%.
+  async gpuThrottle(opts) {
+    const miner = await lib.createMiner(opts);
+    const errors = [];
+    miner.on('error', (e) => errors.push(e.message));
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const hashes = () => miner.stats().totalHashes;
+    const count = async (ms) => { const a = hashes(); await sleep(ms); return hashes() - a; };
+    await miner.start();
+    if (!miner.stats().gpu) { await miner.stop(); return { gpu: false, errors }; }
+    for (let i = 0; i < 400 && !hashes(); i++) await sleep(25);
+    await sleep(500);
+    const full = await count(3000);
+    miner.setThrottle(0.75);
+    await sleep(500);
+    const quarter = await count(3000);
+    miner.setThrottle(0.99);
+    await sleep(1500); // one more batch, then idling for ~99 batches
+    const t = performance.now();
+    await miner.stop();
+    return { gpu: true, full, quarter, stopMs: performance.now() - t, errors };
+  },
 };
 window.__ready = true;
 </script>`;
@@ -123,6 +146,35 @@ test('mines Bitcoin block 1 from the page through the bridge', { skip, timeout: 
     assert.equal(r.shares[0].accepted, true);
     assert.equal(r.stats.accepted, 1);
     assert.equal(r.after, 'stopped');
+  } finally {
+    await bridge.close();
+    await pool.close();
+  }
+});
+
+test('the GPU is throttled like the CPU, and stops at once while idling at 1%', { skip, timeout: 120_000 }, async (t) => {
+  const pool = await MockPool.start({ extranonce1: BLOCK1.xnonce1, extranonce2Size: 4 });
+  const bridge: Bridge = await createBridge({ port: 0, host: '127.0.0.1', allow: [pool.target] });
+  try {
+    const run = page.evaluate((o) => (window as any).T.gpuThrottle(o), {
+      algo: 'sha256d',
+      url: pool.url,
+      bridge: `ws://127.0.0.1:${bridge.port}`,
+      user: 'bc1qbrowsertest',
+      backend: 'webgpu',
+      warmupMs: 20,
+      measureMs: 50,
+    });
+    await pool.waitForMethod('mining.authorize');
+    pool.setDifficulty(1);
+    pool.notify(BLOCK1.notify('b1'));
+    const r = await run;
+    if (!r.gpu) return t.skip('no WebGPU adapter in this browser');
+    assert.deepEqual(r.errors, []);
+    const ratio = r.full / r.quarter;
+    assert.ok(r.full > 0 && r.quarter > 0, JSON.stringify(r));
+    assert.ok(ratio > 2 && ratio < 8, `full speed hashed ${ratio.toFixed(2)}× as much as 25% on the GPU (expected about 4×)`);
+    assert.ok(r.stopMs < 1000, `stop() while idling at 1% took ${Math.round(r.stopMs)} ms`);
   } finally {
     await bridge.close();
     await pool.close();

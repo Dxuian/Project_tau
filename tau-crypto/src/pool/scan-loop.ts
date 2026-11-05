@@ -3,6 +3,7 @@
 import { getBackend } from '../backends/index.ts';
 import type { Kernel, ScanJob } from '../types.ts';
 import type { FromWorker, ToWorker } from './protocol.ts';
+import { clampThrottle, idleMs, Nap } from './throttle.ts';
 
 const now = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -18,12 +19,11 @@ function yieldTask(): Promise<void> {
   });
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-
 export class ScanLoop {
   private kernel: Kernel | null = null;
   private current: { gen: number; job: ScanJob; cursor: number; chunk: number } | null = null;
   private throttle = 0;
+  private readonly nap = new Nap();
   private running = false;
   private disposed = false;
   private readonly post: (msg: FromWorker) => void;
@@ -47,16 +47,19 @@ export class ScanLoop {
         }
         case 'work':
           this.current = { gen: msg.gen, job: msg.job, cursor: msg.job.start, chunk: this.align(msg.chunk) };
+          this.nap.wake(); // a new job doesn't wait out the idling
           void this.run();
           break;
         case 'chunk':
           if (this.current) this.current.chunk = this.align(msg.chunk);
           break;
         case 'throttle':
-          this.throttle = Math.min(0.95, Math.max(0, msg.value));
+          this.throttle = clampThrottle(msg.value);
+          this.nap.wake();
           break;
         case 'stop':
           this.current = null;
+          this.nap.wake();
           break;
         case 'bench':
           await this.bench(msg.job, msg.warmupMs, msg.ms);
@@ -64,6 +67,7 @@ export class ScanLoop {
         case 'dispose':
           this.current = null;
           this.disposed = true;
+          this.nap.wake();
           this.kernel?.dispose();
           this.kernel = null;
           break;
@@ -96,7 +100,7 @@ export class ScanLoop {
           this.post({ type: 'exhausted', gen: cur.gen, seq: cur.job.seq });
           if (this.current === cur) this.current = null;
         }
-        if (this.throttle > 0) await sleep((ms * this.throttle) / (1 - this.throttle));
+        if (this.throttle > 0) await this.nap.sleep(idleMs(ms, this.throttle));
         else await yieldTask();
       }
     } catch (err) {

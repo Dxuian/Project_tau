@@ -15,7 +15,7 @@ export interface MinerOptions extends TuneOptions {
     transport?: TransportFactory;
     tlsInsecure?: boolean;
     userAgent?: string;
-    /** Fraction of time to idle, 0 (none) to 0.95. */
+    /** Fraction of time to idle, 0 (none) to 0.99 (1% of full speed); CPU and GPU alike. */
     throttle?: number;
     /** Browsers: pause while the page is hidden (default true). */
     pauseWhenHidden?: boolean;
@@ -89,6 +89,7 @@ export declare class Miner extends Emitter<MinerEvents> {
     private timer;
     private gpuJob;
     private gpuLoop;
+    private readonly gpuNap;
     private job;
     private offVisibility;
     constructor(options: MinerOptions);
@@ -114,6 +115,7 @@ export declare class Miner extends Emitter<MinerEvents> {
     private resumeInternal;
     pause(): void;
     resume(): void;
+    /** Idles this fraction of the time from now on: 0 (none) to 0.99 (1% of full speed). */
     setThrottle(value: number): void;
     /** Changes the CPU thread count (restarts the workers). */
     setThreads(threads: number): Promise<void>;

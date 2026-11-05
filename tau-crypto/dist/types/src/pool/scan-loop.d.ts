@@ -3,6 +3,7 @@ export declare class ScanLoop {
     private kernel;
     private current;
     private throttle;
+    private readonly nap;
     private running;
     private disposed;
     private readonly post;

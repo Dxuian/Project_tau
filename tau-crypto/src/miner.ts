@@ -6,6 +6,7 @@ import { autotune, type TuneOptions } from './tune/autotune.ts';
 import { kernelSetup } from './backends/setup.ts';
 import { getBackend, SHA256_FAMILY, variantFor } from './backends/index.ts';
 import { WorkerPool } from './pool/pool.ts';
+import { clampThrottle, idleMs, Nap } from './pool/throttle.ts';
 import { compileVariant } from './wasm/variants.ts';
 import { Cmo } from './wasm/api.ts';
 import { createStratumClient } from './stratum/index.ts';
@@ -37,7 +38,7 @@ export interface MinerOptions extends TuneOptions {
   transport?: TransportFactory;
   tlsInsecure?: boolean;
   userAgent?: string;
-  /** Fraction of time to idle, 0 (none) to 0.95. */
+  /** Fraction of time to idle, 0 (none) to 0.99 (1% of full speed); CPU and GPU alike. */
   throttle?: number;
   /** Browsers: pause while the page is hidden (default true). */
   pauseWhenHidden?: boolean;
@@ -105,6 +106,7 @@ export class Miner extends Emitter<MinerEvents> {
   private timer: ReturnType<typeof setInterval> | null = null;
   private gpuJob: ScanJob | null = null;
   private gpuLoop: Promise<void> | null = null;
+  private readonly gpuNap = new Nap();
   private job: { jobId: string; difficulty: number; height: number } | null = null;
   private offVisibility: (() => void) | null = null;
 
@@ -225,6 +227,7 @@ export class Miner extends Emitter<MinerEvents> {
       if (job) {
         seq ||= job.seq;
         this.gpuJob = job;
+        this.gpuNap.wake();
         this.gpuLoop ??= this.runGpu();
       }
     }
@@ -273,12 +276,17 @@ export class Miner extends Emitter<MinerEvents> {
         const gen = this.gen;
         const start = job.start;
         const end = Math.min(start + batch, job.end);
+        const t0 = performance.now();
         const out = await kernel.scan({ ...job, start, end });
+        const ms = performance.now() - t0;
         if (this.gpuJob === job) {
           job.start = end;
           if (end >= job.end) this.gpuJob = this.nextJob();
         }
         this.onProgress(gen, out.hashesDone, out.solutions, 'webgpu');
+        // The same throttle as the CPU workers (pool/scan-loop.ts).
+        const idle = idleMs(ms, this.options.throttle ?? 0);
+        if (idle > 0) await this.gpuNap.sleep(idle);
       }
     } catch (err) {
       this.emit('error', new Error(`webgpu: ${err instanceof Error ? err.message : String(err)}`));
@@ -340,6 +348,7 @@ export class Miner extends Emitter<MinerEvents> {
   private halt(): void {
     this.pool?.stop();
     this.gpuJob = null;
+    this.gpuNap.wake();
   }
 
   private watchVisibility(): void {
@@ -378,9 +387,11 @@ export class Miner extends Emitter<MinerEvents> {
     if (!this.hiddenPaused) this.resumeInternal();
   }
 
+  /** Idles this fraction of the time from now on: 0 (none) to 0.99 (1% of full speed). */
   setThrottle(value: number): void {
-    this.options.throttle = value;
-    this.pool?.setThrottle(value);
+    this.options.throttle = clampThrottle(value);
+    this.pool?.setThrottle(this.options.throttle);
+    this.gpuNap.wake();
   }
 
   /** Changes the CPU thread count (restarts the workers). */
@@ -415,6 +426,7 @@ export class Miner extends Emitter<MinerEvents> {
     this.pool?.terminate();
     this.pool = null;
     this.gpuJob = null;
+    this.gpuNap.wake();
     await this.gpuLoop;
     this.gpu?.dispose();
     this.gpu = null;
