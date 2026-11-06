@@ -121,8 +121,10 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   assert.equal((await served('index.js.map')).status, 200);
   for (const p of ['payouts.js', 'bridge.js', 'wallet.js']) assert.equal((await served(p)).status, 404, `${p} isn't served`);
   // The site proxies events to PostHog first-party (app/ingest), so ad blockers don't drop them.
-  const probe = await fetch(`${site}/ingest/i/v0/e/?probe=1`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-  assert.equal(probe.status, 200, 'the /ingest proxy forwards to PostHog');
+  // redirect:'manual': posthog-js posts to /ingest/i/v0/e/ (trailing slash), which must be
+  // forwarded, not 308-redirected to drop the slash (next.config.mjs skipTrailingSlashRedirect).
+  const probe = await fetch(`${site}/ingest/i/v0/e/?probe=1`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', redirect: 'manual' });
+  assert.equal(probe.status, 200, 'the /ingest proxy forwards trailing-slash paths without a redirect');
   browser = await chromium.launch({ args: [...DESKTOP_ARGS] });
   const context = await desktopContext(browser, { acceptDownloads: true });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: site });

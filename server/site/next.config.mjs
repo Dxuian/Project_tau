@@ -5,6 +5,9 @@
 export default {
   poweredByHeader: false,
   images: { unoptimized: true },
+  // Don't 308-redirect trailing-slash paths: posthog-js posts to /ingest/i/v0/e/ (with
+  // the slash), and the ingest proxy (app/ingest) must forward it as-is, not redirect it.
+  skipTrailingSlashRedirect: true,
   // Served next to the scripts, so PostHog's error tracking can read the stack
   // traces of the browser's errors. The source is public anyway (the repository).
   productionBrowserSourceMaps: true,
