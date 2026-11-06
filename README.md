@@ -85,6 +85,8 @@ The site is called **Bitrush** (bitrush.online), written with its B as Bitcoin's
 
   Nothing reads the page: no autocapture, session replay, heatmaps or surveys, and no remote config or scripts from PostHog, because the page shows a new wallet's 12 words. Every event carries `app: "project-tau"`. The page says: "Your 12 words never leave this device. We don't monitor any sensitive data."
 
+  Events go to PostHog first-party: the browser sends them to a same-origin path (`/ingest`), which the site proxies to PostHog (`app/ingest`), so ad blockers that block PostHog's own domain don't silently drop them. The proxy adds nothing about a visitor (it doesn't forward their IP).
+
 ## Settings
 
 **The payout service** (`server/`). On Node these are environment variables; on Cloudflare they're the `[vars]` in `server/cloudflare/wrangler.toml`.
@@ -187,6 +189,8 @@ Five alerts in Project Tau's PostHog project, each named for its cause. PostHog 
 | payout service unhealthy or silent | the last full hour had no good `payout_health` event, or a bad one |
 
 The payout Worker's cron runs every 15 minutes. Each run sends a `payout_health` event (`server/health.js`): `can_pay` (the words are set), `sweep_ok` (the payout sweep ran), `purge_ok` (the share purge ran), `site_ok` (the site's `/api/address` answers, so the site is up and reaches the payout Worker) and `ok`. A broken deploy, setting or cron sends nothing, which fires the alert just the same. The events hold only these booleans. The "Project Tau" dashboard in PostHog shows them, with the visitor events.
+
+The same run also sends, best-effort, one OTLP log line and the booleans as 0/1 gauges (`server/otel.js`), so the run shows in PostHog's **Logs** and **Metrics** too — the same booleans, no secret, address or amount. The `payout_health` alert stays the source of truth; a telemetry failure never affects it or payouts. (Metrics is a PostHog alpha: enable its feature preview in PostHog to view it.)
 
 Dependabot and secret scanning alerts are repository settings, which only the owner can turn on (Settings, in its Security section).
 

@@ -4,6 +4,8 @@
 // web vitals, and no remote config or scripts from PostHog, because the page
 // shows a new wallet's 12 words. Bitcoin addresses are cut out of everything sent
 // (an error message may hold one), and every event carries `app` (lib/config.js).
+// Events go to a same-origin path (api_host '/ingest'), which the site proxies to
+// PostHog (app/ingest), so ad blockers that block PostHog's domain don't drop them.
 // posthog-js loads in its own chunk once analytics starts (after the page has shown),
 // so it doesn't hold up the first paint; calls made while it loads wait for it.
 
@@ -71,7 +73,10 @@ export function startAnalytics(config) {
 
 function init(posthog, config) {
   posthog.init(config.key, {
-    api_host: config.host,
+    // Same-origin (app/ingest proxies to PostHog), so ad blockers don't drop events;
+    // ui_host keeps "view in PostHog" links pointing at the real host.
+    api_host: config.apiHost,
+    ui_host: config.uiHost,
     // Page views, also on client-side navigation; everything else comes from track().
     capture_pageview: 'history_change',
     autocapture: false,

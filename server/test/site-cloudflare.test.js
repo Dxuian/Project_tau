@@ -120,6 +120,11 @@ test('the site on Cloudflare: a wallet, the hour address rendered by the site Wo
   browser = await chromium.launch({ args: [...DESKTOP_ARGS] });
   const page = await (await desktopContext(browser)).newPage();
   page.on('pageerror', (e) => console.error('page error:', e.message));
+  // Events reach PostHog through the site Worker's first-party /ingest proxy (app/ingest).
+  const ingestHits = [];
+  page.on('request', (r) => {
+    if (new URL(r.url()).pathname.startsWith('/ingest/')) ingestHits.push(r.url());
+  });
   await page.goto(`${site}/`);
   await page.getByTestId('tutorial-skip').click(); // a first visit: the tutorial, skipped
   await page.getByTestId('create-wallet').click();
@@ -156,6 +161,7 @@ test('the site on Cloudflare: a wallet, the hour address rendered by the site Wo
     throw new Error(`${err.message}:\n${ph.received()}`);
   }
   assert.deepEqual(new Set(ph.events().map((e) => e.properties?.app)), new Set(['project-tau']));
+  assert.ok(ingestHits.length > 0, 'events go through the site Worker first-party /ingest proxy');
   const sent = ph.requests.map((r) => r.text).join('\n');
   assert.ok(!sent.includes(address) && !sent.includes(hour.address), 'no addresses');
 });

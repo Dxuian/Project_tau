@@ -120,11 +120,20 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   assert.ok(code.every((c) => c.split('\n').length < 60), 'every chunk is minified');
   assert.equal((await served('index.js.map')).status, 200);
   for (const p of ['payouts.js', 'bridge.js', 'wallet.js']) assert.equal((await served(p)).status, 404, `${p} isn't served`);
+  // The site proxies events to PostHog first-party (app/ingest), so ad blockers don't drop them.
+  const probe = await fetch(`${site}/ingest/i/v0/e/?probe=1`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  assert.equal(probe.status, 200, 'the /ingest proxy forwards to PostHog');
   browser = await chromium.launch({ args: [...DESKTOP_ARGS] });
   const context = await desktopContext(browser, { acceptDownloads: true });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: site });
   const page = await context.newPage();
   page.on('pageerror', (e) => console.error('page error:', e.message));
+  // Events reach PostHog through the first-party /ingest proxy, never PostHog's domain directly.
+  const ingestHits = [];
+  page.on('request', (r) => {
+    const { pathname } = new URL(r.url());
+    if (pathname.startsWith('/ingest/')) ingestHits.push(pathname);
+  });
 
   // A first visit opens with the tutorial (in Arcade, the default theme): how Bitcoin mining works, with a try-it guess.
   await page.goto(`${site}/`);
@@ -285,4 +294,5 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   const exception = events.find((e) => e.event === '$exception');
   assert.match(JSON.stringify(exception.properties.$exception_list), /analytics test error for \[address\]/);
   assert.deepEqual(ph.requests.filter((r) => /\/(static|flags|decide|array)\b/.test(r.path)), [], 'no remote config or scripts from PostHog');
+  assert.ok(ingestHits.length > 0, 'the browser sends events through the first-party /ingest proxy');
 });

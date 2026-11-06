@@ -13,6 +13,7 @@ import { createFetchBridge, poolTarget } from '../../tau-crypto/dist/bridge.js';
 import { createPayoutApi, toJson } from '../api.js';
 import { chainFromConfig, loadConfig, shareCutoff } from '../config.js';
 import { sendHealth } from '../health.js';
+import { sendTelemetry } from '../otel.js';
 import { tidbDatabase } from '../tidb/client.js';
 import { tidbStores } from '../tidb/tidb-stores.js';
 import { d1Stores } from './d1-stores.js';
@@ -84,12 +85,23 @@ export default {
     const cutoff = shareCutoff(a.config);
     const purge = cutoff ? outcome('share purge', a.stores.purge(cutoff).then((n) => `${n} old share records`)) : Promise.resolve(null);
     ctx.waitUntil(
-      Promise.all([sweep, purge])
-        .then(([sweepOk, purgeOk]) => sendHealth(a.config, { canPay: a.api.service.canPay, sweepOk, purgeOk }))
-        .then(
-          (r) => console.log(r.sent ? `health event sent (ok: ${r.properties.ok})` : `health event not sent: ${r.reason ?? `PostHog answered ${r.status}`}`),
-          (err) => console.log(`health event failed: ${err.message}`),
-        ),
+      Promise.all([sweep, purge]).then(async ([sweepOk, purgeOk]) => {
+        let health;
+        try {
+          health = await sendHealth(a.config, { canPay: a.api.service.canPay, sweepOk, purgeOk });
+          console.log(health.sent ? `health event sent (ok: ${health.properties.ok})` : `health event not sent: ${health.reason ?? `PostHog answered ${health.status}`}`);
+        } catch (err) {
+          console.log(`health event failed: ${err.message}`);
+        }
+        // The same checks as a log line and 0/1 gauges, for PostHog's Logs/Metrics. Best-effort.
+        if (health?.properties) {
+          try {
+            console.log(`telemetry: ${(await sendTelemetry(a.config, health.properties)).summary}`);
+          } catch (err) {
+            console.log(`telemetry failed: ${err.message}`);
+          }
+        }
+      }),
     );
   },
 };
