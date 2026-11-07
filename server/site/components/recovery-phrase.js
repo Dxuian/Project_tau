@@ -50,7 +50,7 @@ export default function RecoveryPhrase({ wallet }) {
 
   return (
     <div className="space-y-4">
-      <ol ref={reveal} key={wallet.address} data-testid="words" translate="no" className="notranslate grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <ol ref={reveal} key={wallet.address} data-testid="words" translate="no" className="ph-no-capture notranslate grid grid-cols-2 gap-2 sm:grid-cols-3">
         {wallet.mnemonic.split(' ').map((w, i) => (
           <li key={i} className="flex items-center gap-2 rounded-lg border bg-background/50 px-3 py-2">
             <span className="w-5 text-right font-mono text-xs text-muted-foreground tabular-nums">{i + 1}</span>
@@ -63,7 +63,7 @@ export default function RecoveryPhrase({ wallet }) {
 
       <div className="rounded-xl border bg-background/40 px-3 py-2 text-xs">
         <span className="text-muted-foreground">Its address: </span>
-        <code data-testid="new-address" translate="no" className="notranslate font-mono break-all">
+        <code data-testid="new-address" translate="no" className="ph-no-capture notranslate font-mono break-all">
           {wallet.address}
         </code>
       </div>
@@ -118,7 +118,7 @@ export default function RecoveryPhrase({ wallet }) {
             autoCapitalize="off"
             translate="no"
             onFocus={(e) => e.target.select()}
-            className="notranslate h-40 w-full resize-none rounded-lg border bg-background/50 p-3 font-mono text-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className="ph-no-capture notranslate h-40 w-full resize-none rounded-lg border bg-background/50 p-3 font-mono text-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           />
           <Button size="sm" variant="outline" onClick={() => setSharing(null)} data-testid="share-done">
             Done

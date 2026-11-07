@@ -251,6 +251,22 @@ export async function startFakePostHog() {
     for await (const c of req) chunks.push(c);
     const { pathname } = new URL(req.url, 'http://localhost');
     requests.push({ method: req.method, path: pathname, text: postHogText(Buffer.concat(chunks)) });
+    // Remote config (/flags): a valid response with session replay OFF, so the recorder
+    // never loads against the stand-in (nothing to record), while the request itself
+    // proves the client reads remote config first-party through /ingest.
+    if (req.method !== 'OPTIONS' && /\/(flags|decide)\b/.test(pathname)) {
+      res.writeHead(200, { 'access-control-allow-origin': req.headers.origin ?? '*', 'content-type': 'application/json' });
+      res.end(JSON.stringify({ featureFlags: {}, sessionRecording: false, autocapture_opt_out: true, supportedCompression: ['gzip-js'], config: { enable_collect_everything: false } }));
+      return;
+    }
+    // Scripts PostHog loads (remote config under /array, the recorder under /static): valid,
+    // empty JS, so the browser can parse them. The real PostHog serves real scripts here; the
+    // stand-in only needs to not break the page (nothing records against it).
+    if (req.method === 'GET' && /\.js$/.test(pathname)) {
+      res.writeHead(200, { 'access-control-allow-origin': req.headers.origin ?? '*', 'content-type': 'application/javascript' });
+      res.end('/* stand-in posthog script */');
+      return;
+    }
     res.writeHead(req.method === 'OPTIONS' ? 204 : 200, {
       'access-control-allow-origin': req.headers.origin ?? '*',
       'access-control-allow-credentials': 'true',

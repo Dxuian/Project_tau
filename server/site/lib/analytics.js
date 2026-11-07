@@ -1,13 +1,17 @@
 // Product analytics in the browser (PostHog), limited to what this site chooses
-// to send: page views, uncaught errors, and the named events passed to track().
-// Nothing reads the page: no autocapture, session replay, heatmaps, surveys or
-// web vitals, and no remote config or scripts from PostHog, because the page
-// shows a new wallet's 12 words. Bitcoin addresses are cut out of everything sent
-// (an error message may hold one), and every event carries `app` (lib/config.js).
-// Events go to a same-origin path (api_host '/ingest'), which the site proxies to
-// PostHog (app/ingest), so ad blockers that block PostHog's domain don't drop them.
-// posthog-js loads in its own chunk once analytics starts (after the page has shown),
-// so it doesn't hold up the first paint; calls made while it loads wait for it.
+// to send: page views, uncaught errors, the named events passed to track(), and
+// masked session replay. The page shows a new wallet's 12 words, so replay never
+// records them: the words' element is dropped entirely (ph-no-capture), and all
+// .notranslate text (words, addresses, the backup box) and every input value are
+// masked before anything is serialized (initOptions). Autocapture, heatmaps and
+// surveys stay off; web vitals (CLS/FCP/LCP/INP — performance numbers, never page
+// content) are on. Bitcoin addresses are also cut out of every (non-replay) event,
+// and every event carries `app` (lib/config.js).
+// Events and the recorder go to a same-origin path (api_host '/ingest'), which the
+// site proxies to PostHog (app/ingest), so ad blockers that block PostHog's domains
+// don't drop them. posthog-js loads in its own chunk once analytics starts (after the
+// page has shown), so it doesn't hold up the first paint; calls made while it loads
+// wait for it.
 
 // bech32 (bc1, tb1, bcrt1, either case) and base58 (1, 2, 3, m, n) addresses.
 const BECH32 = /\b(?:bc|tb|bcrt)1[02-9ac-hj-np-z]{6,87}\b/gi;
@@ -26,6 +30,10 @@ export function scrubAddresses(value) {
 /** What PostHog's before_send does to every event: addresses out, `app` and the network in. */
 export function prepareEvent(event, { app, network }) {
   if (!event) return event;
+  // Replay snapshots are already masked (initOptions): their DOM carries no words or
+  // addresses, so they're only tagged, not walked — the address scrub would run over a
+  // large payload every couple of seconds, on the CPU the miner shares.
+  if (event.event === '$snapshot') return { ...event, properties: { ...(event.properties ?? {}), app, network } };
   return {
     ...event,
     properties: { ...scrubAddresses(event.properties ?? {}), app, network },
@@ -71,8 +79,9 @@ export function startAnalytics(config) {
   );
 }
 
-function init(posthog, config) {
-  posthog.init(config.key, {
+/** The posthog.init options (pure, so it can be checked in a test): masked replay on, nothing that reads the page unmasked. */
+export function initOptions(config) {
+  return {
     // Same-origin (app/ingest proxies to PostHog), so ad blockers don't drop events;
     // ui_host keeps "view in PostHog" links pointing at the real host.
     api_host: config.apiHost,
@@ -86,22 +95,38 @@ function init(posthog, config) {
     capture_dead_clicks: false,
     capture_heatmaps: false,
     capture_exceptions: false,
-    capture_performance: false,
-    disable_session_recording: true,
+    // Web vitals only (CLS/FCP/LCP/INP): performance numbers and element selectors, never
+    // page text or input values. Network timing stays off (it would capture request URLs).
+    capture_performance: { web_vitals: true, network_timing: false },
+    // Session replay, masked. The words (a fresh phrase) are dropped from the recording
+    // entirely by ph-no-capture on their element; on top of that, every input value and
+    // all .notranslate text (the words, every address, the backup box) are masked before
+    // anything is serialized. Recording is still gated by PostHog's "Record user sessions"
+    // project setting: off there, nothing records.
+    disable_session_recording: false,
+    session_recording: {
+      maskAllInputs: true,
+      maskTextSelector: '.notranslate',
+    },
     disable_surveys: true,
     disable_web_experiments: true,
     disable_product_tours: true,
     disable_conversations: true,
-    // No remote config (it could switch features on) and no scripts loaded from PostHog.
-    advanced_disable_flags: true,
+    // Remote config (/flags) is read so PostHog can turn session replay on. It can't turn
+    // anything else on: the options above are the ceiling (a feature off here stays off),
+    // and the only script loaded from PostHog is the replay recorder, first-party via /ingest.
     advanced_disable_toolbar_metrics: true,
-    disable_external_dependency_loading: true,
+    disable_external_dependency_loading: false,
     // Anonymous visitors: no person profiles, no cookies, nothing when the browser asks not to be tracked.
     person_profiles: 'identified_only',
     persistence: 'localStorage',
     respect_dnt: true,
     before_send: (event) => prepareEvent(event, config),
-  });
+  };
+}
+
+function init(posthog, config) {
+  posthog.init(config.key, initOptions(config));
 }
 
 /** Sends a named event (once PostHog has loaded); does nothing while analytics is off. Never pass words or addresses. */

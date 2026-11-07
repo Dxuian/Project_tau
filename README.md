@@ -83,9 +83,9 @@ The site is called **Bitrush** (bitrush.online), written with its B as Bitcoin's
   - uncaught errors, for PostHog's error tracking. The browser source maps are served next to the scripts (`next.config.mjs`), so stack traces resolve without an upload step;
   - named events, none of which carry words or addresses: wallet created, backup downloaded, words copied or shared, wallet restored, payout address chosen, mining start, stop, speed, errors and unavailable, payout checks, blocks seen, live graph switched, theme changed.
 
-  Nothing reads the page: no autocapture, session replay, heatmaps or surveys, and no remote config or scripts from PostHog, because the page shows a new wallet's 12 words. Every event carries `app: "project-tau"`. The page says: "Your 12 words never leave this device. We don't monitor any sensitive data."
+  Session replay is on, but masked, and the words are never recorded: the words' element is dropped from the recording entirely (`ph-no-capture`), and on top of that every input value and all word/address text are masked before anything is serialized. Web vitals (CLS/FCP/LCP/INP) are captured too — performance numbers only, no page content. Autocapture, heatmaps and surveys stay off (loading the recorder re-enables remote config and script loading, but nothing else can be switched on — the client config is the ceiling). Every event carries `app: "project-tau"`, and addresses are cut out of events. The page's promise still holds: "Your 12 words never leave this device. We don't monitor any sensitive data."
 
-  Events go to PostHog first-party: the browser sends them to a same-origin path (`/ingest`), which the site proxies to PostHog (`app/ingest`), so ad blockers that block PostHog's own domain don't silently drop them. The proxy adds nothing about a visitor (it doesn't forward their IP).
+  Events and the replay recorder go to PostHog first-party: the browser sends them to a same-origin path (`/ingest`), which the site proxies to PostHog (`app/ingest`) — events to the ingestion host, `/ingest/static/*` (the recorder) to the assets host — so ad blockers that block PostHog's own domains don't silently drop them. The proxy adds nothing about a visitor (it doesn't forward their IP).
 
 ## Settings
 

@@ -125,6 +125,10 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   // forwarded, not 308-redirected to drop the slash (next.config.mjs skipTrailingSlashRedirect).
   const probe = await fetch(`${site}/ingest/i/v0/e/?probe=1`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', redirect: 'manual' });
   assert.equal(probe.status, 200, 'the /ingest proxy forwards trailing-slash paths without a redirect');
+  // The masked-replay recorder loads first-party too: /ingest/static/* is forwarded (to
+  // PostHog's assets host), so no script comes straight from PostHog's domain, which ad blockers drop.
+  const recorder = await fetch(`${site}/ingest/static/recorder.js?v=probe`, { redirect: 'manual' });
+  assert.equal(recorder.status, 200, 'the /ingest proxy forwards the recorder script (assets host)');
   browser = await chromium.launch({ args: [...DESKTOP_ARGS] });
   const context = await desktopContext(browser, { acceptDownloads: true });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: site });
@@ -159,6 +163,9 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   const address = (await page.getByTestId('new-address').innerText()).trim();
   assert.match(address, /^bcrt1q/);
   assert.equal(await page.getByTestId('words').getAttribute('translate'), 'no', 'page translators leave the words alone');
+  // The fresh phrase is dropped from session replay entirely (ph-no-capture), on top of the
+  // all-inputs + .notranslate text masking set in lib/analytics.js.
+  assert.match(await page.getByTestId('words').getAttribute('class'), /\bph-no-capture\b/, 'the words are never recorded');
 
   // Download: the backup file holds the words and the address.
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download').click()]);
@@ -295,6 +302,9 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
   assert.deepEqual(pages, new Set(['/']), 'one screen');
   const exception = events.find((e) => e.event === '$exception');
   assert.match(JSON.stringify(exception.properties.$exception_list), /analytics test error for \[address\]/);
-  assert.deepEqual(ph.requests.filter((r) => /\/(static|flags|decide|array)\b/.test(r.path)), [], 'no remote config or scripts from PostHog');
+  // Masked replay is on, so PostHog's remote config is read now (over /ingest/array or /flags,
+  // first-party) — that's how PostHog can turn replay on. Whatever it enables, the guards above
+  // hold: nothing sent carries the words or an address, recording or not.
+  assert.ok(ingestHits.some((p) => /\/(flags|decide|array)\b/.test(p)), 'remote config flows first-party through /ingest');
   assert.ok(ingestHits.length > 0, 'the browser sends events through the first-party /ingest proxy');
 });

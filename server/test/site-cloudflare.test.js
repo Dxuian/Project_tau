@@ -116,6 +116,9 @@ test('the site on Cloudflare: a wallet, the hour address rendered by the site Wo
   const map = (await (await fetch(script)).text()).match(/\/\/# sourceMappingURL=(\S+)\s*$/)?.[1];
   assert.ok(map, `${script.pathname} names its source map`);
   assert.equal((await fetch(new URL(map, script))).status, 200, 'and serves it');
+  // The masked-replay recorder loads first-party through the site Worker's /ingest proxy too
+  // (/ingest/static/* -> PostHog's assets host), so no script comes straight from PostHog's domain.
+  assert.equal((await fetch(`${site}/ingest/static/recorder.js?v=probe`, { redirect: 'manual' })).status, 200, 'the Worker forwards the recorder script');
 
   browser = await chromium.launch({ args: [...DESKTOP_ARGS] });
   const page = await (await desktopContext(browser)).newPage();

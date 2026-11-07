@@ -46,6 +46,20 @@ export function posthogHost(env = process.env) {
 }
 
 /**
+ * Where the browser loads PostHog's static scripts (the session-replay recorder):
+ * PostHog Cloud serves them from a regional assets host (us-assets / eu-assets), a
+ * self-hosted or custom host from itself. The ingest proxy forwards /ingest/static/*
+ * here, so the recorder is first-party too (never a script straight from PostHog's
+ * domain, which ad blockers drop); null when the host is unusable.
+ */
+export function posthogAssetsHost(env = process.env) {
+  const host = posthogHost(env);
+  if (!host) return null;
+  const cloud = host.match(/^https:\/\/(us|eu)\.i\.posthog\.com$/);
+  return cloud ? `https://${cloud[1]}-assets.i.posthog.com` : host;
+}
+
+/**
  * PostHog, for the browser: POSTHOG_KEY (the project's public phc_ key) and
  * POSTHOG_HOST (default PostHog US). Analytics is off when the key is unset or
  * malformed; it never stops the site from working. The browser sends events to a
