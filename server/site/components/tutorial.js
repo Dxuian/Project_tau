@@ -1,17 +1,16 @@
 'use client';
-// The visitor's tutorial: how Bitcoin mining works, in plain words for someone new
-// to it. It opens by itself on a first visit (until it's closed once: useTutorial),
-// and again from "See tutorial" on the miner. Its pictures use the theme's tokens.
+// The visitor's tutorial: how Bitcoin mining works, for someone new to it, in four
+// one-sentence steps. It opens as an overlay (app/dashboard.js): by itself on a first
+// visit (until it's closed once: useTutorial), and again from "See tutorial" on the
+// miner. Its pictures use the theme's tokens.
 import { gsap } from 'gsap';
 import { KeyRoundIcon, MailIcon } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const LINE = { className: 'fill-none stroke-muted-foreground', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
 const TEXT = 'space-y-2.5 text-sm leading-relaxed [&_b]:font-semibold';
-const NODES = [[50, 30], [110, 14], [160, 48], [232, 26], [72, 84], [140, 90], [214, 80]];
-const LINKS = [[0, 1], [1, 2], [2, 3], [1, 3], [0, 4], [4, 5], [5, 2], [0, 2], [5, 6], [6, 3], [2, 6]];
 
 function Art({ children }) {
   return (
@@ -52,51 +51,19 @@ function Chip({ icon: Icon, title, note }) {
   );
 }
 
+// A winning hash, for scale: it starts with about 19 zeros (a picture, not a real block).
+const WINNING = `${'0'.repeat(19)}3a7f19c4e2b80d56f1a9c37e4b2d08f65c1e9a43b7d20`;
+function WinningHash() {
+  return (
+    <code translate="no" className="block w-full max-w-sm rounded-xl border bg-background/40 p-3 font-mono text-[13px] leading-relaxed break-all text-muted-foreground">
+      <span className="font-bold text-primary">{WINNING.slice(0, 19)}</span>
+      {WINNING.slice(19)}
+    </code>
+  );
+}
+
+// One sentence each.
 export const STEPS = [
-  {
-    title: 'Bitcoin has no boss',
-    art: (
-      <Art>
-        {LINKS.map(([a, b]) => (
-          <line key={`${a}-${b}`} {...LINE} x1={NODES[a][0]} y1={NODES[a][1]} x2={NODES[b][0]} y2={NODES[b][1]} />
-        ))}
-        {NODES.map(([x, y]) => (
-          <g key={`${x}-${y}`}>
-            <circle className="fill-card stroke-foreground" strokeWidth={2} cx={x} cy={y} r={10} />
-            <rect className="fill-primary" x={x - 4} y={y - 4} width={8} height={8} rx={1.5} />
-          </g>
-        ))}
-      </Art>
-    ),
-    body: (
-      <>
-        <p>
-          Bitcoin is money run by thousands of computers around the world, not a bank. They all keep the same record of payments, the <b>blockchain</b>, and check
-          every new one. That&apos;s what <b>decentralized</b> means: no one is in charge, and no one can change the record on their own.
-        </p>
-        <p className="text-muted-foreground">A one-minute tour. You can skip it, and open it again any time from the miner.</p>
-      </>
-    ),
-  },
-  {
-    title: 'Your wallet: an address and 12 words',
-    art: (
-      <div className="grid w-full max-w-sm grid-cols-2 gap-3">
-        <Chip icon={MailIcon} title="Address" note="Safe to share" />
-        <Chip icon={KeyRoundIcon} title="12 words" note="Keep them secret" />
-      </div>
-    ),
-    body: (
-      <>
-        <p>
-          Your <b>address</b> is like an account number. It&apos;s safe to share: it&apos;s where bitcoin is sent to you.
-        </p>
-        <p>
-          Your <b>12 words</b> are the key. Whoever has them can spend your bitcoin, so keep them secret. They&apos;re made in your browser and never leave it.
-        </p>
-      </>
-    ),
-  },
   {
     title: 'Why miners get paid',
     art: (
@@ -109,96 +76,49 @@ export const STEPS = [
       </Art>
     ),
     body: (
-      <>
-        <p>
-          A bank pays its staff to keep its books. Bitcoin has no staff, so it pays its miners instead, for adding each new <b>block</b> of payments, about every 10
-          minutes.
-        </p>
-        <p>Miners race to add each block, and the winner gets 3.125 new bitcoin, plus the fees from the payments inside. That&apos;s the only way new bitcoin is made.</p>
-      </>
+      <p>
+        Bitcoin is like a bank, but instead of paying employees, it pays its <b>miners</b>.
+      </p>
     ),
   },
   {
-    title: 'Mining is a guessing game',
-    guess: true,
+    title: 'Mining is guessing',
+    art: <WinningHash />,
+    body: <p>To win new bitcoin, a miner has to guess a number that starts with about 19 zeros.</p>,
+  },
+  {
+    title: 'Your wallet',
+    art: (
+      <div className="grid w-full max-w-sm grid-cols-2 gap-3">
+        <Chip icon={MailIcon} title="Address" note="Safe to share" />
+        <Chip icon={KeyRoundIcon} title="12 words" note="Your password" />
+      </div>
+    ),
     body: (
       <p>
-        To win a block, a computer has to find a <b>hash</b> that starts with about 19 zeros. There&apos;s no shortcut, only guessing. Try it:
+        Your <b>address</b> is safe to share, but your <b>12 words</b> are your wallet&apos;s password: never share or lose them.
       </p>
     ),
-    after: (
-      <>
-        <p>
-          Press <b>Mine BTC</b> and your browser starts guessing, until you press it again. Its close calls show up as <b>shares</b>. If it finds a block, the payout
-          reaches your address about 100 blocks (around 17 hours) later.
-        </p>
-        <p className="text-muted-foreground">Mining can warm up your device: the Speed slider turns it down.</p>
-      </>
+  },
+  {
+    title: 'Your turn',
+    art: (
+      <Art>
+        <Coin x={64} r={30} />
+        <path className="fill-none stroke-primary" strokeWidth={2} strokeDasharray="5 4" d="M106 52h62" />
+        <path {...LINE} d="M164 42l10 10-10 10" />
+        <rect className="fill-card stroke-foreground" strokeWidth={2} x={190} y={30} width={64} height={44} rx={6} />
+        <path {...LINE} d="M190 36l32 20 32-20" />
+        <Sparkle x={26} y={20} s={0.6} />
+      </Art>
+    ),
+    body: (
+      <p>
+        Press <b>Mine BTC</b> to start guessing, and if you ever win, the bitcoin goes to your address.
+      </p>
     ),
   },
 ];
-
-const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
-const zeros = (n) => `${n} ${n === 1 ? 'zero' : 'zeros'}`;
-
-/** The best of `n` guesses: SHA-256 of a made-up block and a guess, in the browser (Web Crypto). */
-async function bestOf(n) {
-  const salt = Array.from(crypto.getRandomValues(new Uint32Array(2))).join('');
-  const text = new TextEncoder();
-  const hashes = await Promise.all(Array.from({ length: n }, (_, i) => crypto.subtle.digest('SHA-256', text.encode(`block ${salt} guess ${i}`))));
-  let best = { hash: '', zeros: -1 };
-  for (const buf of hashes) {
-    const hash = hex(buf);
-    const z = hash.match(/^0*/)[0].length;
-    if (z > best.zeros) best = { hash, zeros: z };
-  }
-  return best;
-}
-
-/** "Try a few guesses yourself": a handful of hashes, nothing sent anywhere (not mining). */
-function GuessGame() {
-  const [result, setResult] = useState(null); // { hash, zeros, n }
-  const [busy, setBusy] = useState(false);
-  const available = typeof crypto !== 'undefined' && Boolean(crypto.subtle);
-  const guess = async (n) => {
-    setBusy(true);
-    try {
-      setResult({ ...(await bestOf(n)), n });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="space-y-2.5" data-testid="guess-game">
-      {available && (
-        <>
-          <code translate="no" data-testid="guess-hash" className="notranslate block rounded-xl border bg-background/40 p-3 font-mono text-[13px] leading-relaxed break-all">
-            {result ? (
-              <>
-                <span className="font-bold text-primary">{result.hash.slice(0, result.zeros)}</span>
-                {result.hash.slice(result.zeros)}
-              </>
-            ) : (
-              'Press Guess to try your luck.'
-            )}
-          </code>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => guess(1)} disabled={busy} data-testid="guess-one">
-              Guess
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => guess(1000)} disabled={busy} data-testid="guess-many">
-              Guess 1,000 times
-            </Button>
-          </div>
-          <p aria-live="polite" data-testid="guess-result" className="text-sm font-medium empty:hidden">
-            {result && `${result.n === 1 ? 'That guess' : `Best of ${result.n.toLocaleString('en')} guesses`}: ${zeros(result.zeros)}. A winning hash needs about 19.`}
-          </p>
-        </>
-      )}
-    </div>
-  );
-}
 
 /**
  * The tutorial's steps, with Back / Next and Skip. `step` is controlled; `onClose(finished)`
@@ -227,7 +147,7 @@ export default function Tutorial({ step, onStep, onClose, finishLabel, Title = '
         )}
       </div>
       <div aria-live="polite">
-        <div key={step} ref={enter} className="flex min-h-[20rem] flex-col gap-3">
+        <div key={step} ref={enter} className="flex min-h-[13rem] flex-col gap-3">
           {s.art && (
             <div aria-hidden className="flex justify-center">
               {s.art}
@@ -235,8 +155,6 @@ export default function Tutorial({ step, onStep, onClose, finishLabel, Title = '
           )}
           <Title className="font-display text-xl leading-snug font-semibold tracking-tight sm:text-2xl">{s.title}</Title>
           <div className={TEXT}>{s.body}</div>
-          {s.guess && <GuessGame />}
-          {s.after && <div className={TEXT}>{s.after}</div>}
         </div>
       </div>
       <div className="flex items-center justify-between gap-3">

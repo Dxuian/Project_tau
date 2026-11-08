@@ -3,11 +3,11 @@
 > Bitrush (https://bitrush.online) mines Bitcoin in the browser. It explains how Bitcoin mining works, creates a wallet on the visitor's device and mines with one button. No sign-up, no download.
 
 - Mining starts only when the visitor presses Mine BTC, and stops when they press it again. It runs on the device's processor, so the device may warm up; a Speed slider (0 to 100%) turns it down, and 0 pauses it.
-- The wallet: an address (safe to share; where bitcoin is sent) and 12 words (the key; made in the browser and never sent anywhere). A visitor can also upload a wallet file or paste an address they already have.
-- How Bitcoin mining works, as the tutorial puts it: about every 10 minutes, new payments are packed into a block. To add it, computers race to find a hash that starts with about 19 zeros; there's no shortcut, only guessing. The winner gets 3.125 new bitcoin plus the block's fees, the only way new bitcoin is made.
+- The wallet: an address (safe to share; where bitcoin is sent) and 12 words (the wallet's password: never share or lose them; made in the browser and never sent anywhere). A visitor can also upload a wallet file or paste an address they already have.
+- How Bitcoin mining works: Bitcoin is like a bank, but instead of paying employees, it pays its miners. About every 10 minutes, new payments are packed into a block. To add it, computers race to find a hash that starts with about 19 zeros; there's no shortcut, only guessing. The winner gets 3.125 new bitcoin plus the block's fees, the only way new bitcoin is made.
 - If a visitor's browser finds a block, the payout goes to their address once the block is confirmed, about 100 blocks (around 17 hours) later.
 - Privacy: the site counts visits and button presses, never the 12 words or addresses.
 
 ## Pages
 
-- [Bitrush](https://bitrush.online/): the one screen (a tutorial on a first visit, then the wallet setup, then the miner)
+- [Bitrush](https://bitrush.online/): the one screen (the wallet setup, with a short tutorial over it on a first visit, then the miner)

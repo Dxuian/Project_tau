@@ -47,7 +47,7 @@ const FAQ = [
   ],
   [
     'Why does Bitcoin pay miners?',
-    'A bank pays its staff to keep its books. Bitcoin has no staff, so it pays its miners instead, for adding each new block. That is the only way new bitcoin is made.',
+    'Bitcoin is like a bank, but instead of paying employees, it pays its miners, for adding each new block of payments. That is the only way new bitcoin is made.',
   ],
   [
     'What do I need to mine on Bitrush?',
@@ -55,7 +55,7 @@ const FAQ = [
   ],
   [
     'Does Bitrush see my 12 words?',
-    "No. Your 12 words are made in your browser and never leave your device, and Bitrush doesn't monitor any sensitive data. Your address is safe to share: it's where bitcoin is sent to you.",
+    "No. Your 12 words are your wallet's password: they are made in your browser and never leave your device, and Bitrush doesn't monitor any sensitive data. Never share or lose them. Your address is safe to share: it's where bitcoin is sent to you.",
   ],
   [
     'When does a payout arrive?',
@@ -79,7 +79,7 @@ const STRUCTURED = [
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
     featureList: [
       'Mines Bitcoin in the browser, started and stopped with one button',
-      'A tutorial on how Bitcoin mining works, with a try-it guessing game',
+      'A short tutorial on how Bitcoin mining works, for beginners',
       'Creates a Bitcoin wallet on the device; its 12 words never leave it',
       'A live speed graph, shares and payout status',
       '26 themes',

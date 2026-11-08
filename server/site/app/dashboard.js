@@ -1,7 +1,7 @@
 'use client';
-// Bitrush on one screen. On a first visit: the tutorial (components/tutorial.js).
-// Then, until the visitor has a payout address: the wallet setup
-// (components/wallet-setup.js). Then the miner, where "See tutorial" opens it again. Left: the rig (the
+// Bitrush on one screen. Until the visitor has a payout address: the wallet setup
+// (components/wallet-setup.js), with the tutorial (components/tutorial.js) over it as an
+// overlay on a first visit. Then the miner, where "See tutorial" opens it again. Left: the rig (the
 // mine button, the hashrate, the stats, the speed) and the live graph. Right: the
 // details (the payout address, this hour's mining address, the visitor's blocks).
 // Nothing loads or mines until the visitor presses the mine button.
@@ -49,19 +49,22 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
   const [tutorialStep, setTutorialStep] = useState(0);
   const [tutorialOpen, setTutorialOpen] = useState(false); // reopened from the miner
   const rig = useRef(null);
-  const view = !saved.ready || !tutorial.ready ? 'loading' : !tutorial.seen ? 'tutorial' : !saved.address || changing ? 'setup' : 'miner';
+  const view = !saved.ready || !tutorial.ready ? 'loading' : !saved.address || changing ? 'setup' : 'miner';
+  // The tutorial is an overlay, never a page: by itself on a first visit (over the wallet
+  // setup), and from "See tutorial" (over the miner, which keeps mining).
+  const showTutorial = view !== 'loading' && (tutorialOpen || !tutorial.seen);
 
   const openTutorial = () => {
     setTutorialStep(0);
     setTutorialOpen(true);
     track('tutorial_opened');
   };
-  // Skipped or finished, it counts as seen: it won't open by itself again.
+  // Skipped or finished, it counts as seen: it won't open by itself again. (The step resets
+  // when it next opens, so the closing animation doesn't flash the first step.)
   const closeTutorial = (finished) => {
     track('tutorial_closed', { finished, step: tutorialStep + 1, first_visit: !tutorial.seen });
     tutorial.markSeen();
     setTutorialOpen(false);
-    setTutorialStep(0);
   };
 
   // A small jolt when mining starts.
@@ -80,7 +83,7 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
   }, [count]);
 
   const blocker = !saved.address ? 'Add a payout address first.' : !mining ? 'Mining is unavailable right now.' : null;
-  const [stateLabel, dot] = view === 'tutorial' ? ['Tutorial', 'bg-primary'] : view !== 'miner' ? ['Setup', 'bg-primary'] : mining ? STATES[miner.state] ?? STATES.idle : ['Unavailable', 'bg-destructive'];
+  const [stateLabel, dot] = view !== 'miner' ? ['Setup', 'bg-primary'] : mining ? STATES[miner.state] ?? STATES.idle : ['Unavailable', 'bg-destructive'];
   const toggle = () => (miner.running ? miner.stop() : miner.start(mining?.index));
 
   return (
@@ -130,15 +133,6 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
         {view === 'loading' && (
           <main aria-busy="true" className="flex flex-1 justify-center">
             <div aria-hidden className="mx-auto mt-10 h-64 w-full max-w-5xl animate-pulse rounded-2xl border bg-card" />
-          </main>
-        )}
-        {view === 'tutorial' && (
-          <main className="flex flex-1 items-start justify-center py-4 sm:py-8 lg:items-center lg:pb-24">
-            <Card {...reveal(1)} className="reveal w-full max-w-xl">
-              <CardContent>
-                <Tutorial step={tutorialStep} onStep={setTutorialStep} onClose={closeTutorial} finishLabel={saved.address ? 'Go to the miner' : 'Set up my wallet'} />
-              </CardContent>
-            </Card>
           </main>
         )}
         {view === 'setup' && (
@@ -330,9 +324,15 @@ export default function Dashboard({ network, bridgeUrl, pool, minerUrl, initialM
         )}
       </div>
 
-      <Dialog open={tutorialOpen} onOpenChange={(open) => !open && closeTutorial(false)}>
-        <DialogContent showClose={false} aria-describedby={undefined} className="sm:max-w-xl">
-          <Tutorial step={tutorialStep} onStep={setTutorialStep} onClose={closeTutorial} finishLabel="Back to the miner" Title={DialogTitle} />
+      <Dialog open={showTutorial} onOpenChange={(open) => !open && closeTutorial(false)}>
+        <DialogContent showClose={false} aria-describedby={undefined} className="sm:max-w-md">
+          <Tutorial
+            step={tutorialStep}
+            onStep={setTutorialStep}
+            onClose={closeTutorial}
+            finishLabel={!saved.address ? 'Set up my wallet' : tutorial.seen ? 'Back to the miner' : 'Go to the miner'}
+            Title={DialogTitle}
+          />
         </DialogContent>
       </Dialog>
     </div>

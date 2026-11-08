@@ -141,17 +141,17 @@ test('the site: create a wallet, keep the words, mine a block in the page, get p
     if (pathname.startsWith('/ingest/')) ingestHits.push(pathname);
   });
 
-  // A first visit opens with the tutorial (in Arcade, the default theme): how Bitcoin mining works, with a try-it guess.
+  // A first visit opens the tutorial (in Arcade, the default theme) as an overlay over the
+  // wallet setup: how Bitcoin mining works, in four one-sentence steps.
   await page.goto(`${site}/`);
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'arcade');
-  await page.getByTestId('tutorial').waitFor();
-  assert.equal(await page.getByTestId('setup').count(), 0, 'the tutorial first');
+  await page.getByRole('dialog').getByTestId('tutorial').waitFor();
+  await page.getByTestId('setup').waitFor({ state: 'attached' }); // underneath, not instead
   assert.equal((await page.getByTestId('tutorial-count').innerText()).trim(), '1 / 4');
   for (let i = 0; i < 3; i++) await page.getByTestId('tutorial-next').click();
-  await page.getByTestId('guess-many').click();
-  await page.getByTestId('guess-result').getByText(/^Best of 1,000 guesses: \d+ zeros?\. A winning hash needs about 19\.$/).waitFor();
   assert.equal((await page.getByTestId('tutorial-next').innerText()).trim(), 'Set up my wallet');
   await page.getByTestId('tutorial-next').click();
+  await page.getByTestId('tutorial').waitFor({ state: 'detached' });
   assert.equal(await page.evaluate(() => localStorage.getItem('tau.tutorial')), 'seen', 'remembered: it opens by itself only once');
 
   // Then the wallet setup: no miner until it's done. Create a wallet in the browser.

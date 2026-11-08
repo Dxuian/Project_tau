@@ -52,10 +52,11 @@ Slot N (one an hour) is receive index N of our wallet: `1 + whole hours since TA
 The site is called **Bitrush** (bitrush.online), written with its B as Bitcoin's ₿. The project and repository are still Project Tau.
 
 **One screen**, in 26 themes: Arcade by default; the theme button switches and remembers the choice on the device. Built with shadcn/ui on Tailwind CSS v4, with GSAP for the motion.
-- **A first visit opens with a tutorial** on how Bitcoin mining works, in 4 short steps for someone new to it:
-  - Bitcoin as a decentralized network, and the wallet (the address to share, the 12 words to keep secret);
-  - the reward: a bank pays its staff to keep its books, and Bitcoin pays its miners for each block;
-  - mining as guessing, with a try-it guess (a few SHA-256 hashes in the browser, sent nowhere), then what mining here does and when a payout arrives.
+- **A first visit opens a tutorial** on how Bitcoin mining works, for someone new to it: an overlay over the wallet setup, in 4 one-sentence steps:
+  - why miners get paid (Bitcoin is like a bank, but instead of paying employees, it pays its miners);
+  - mining as guessing (a number that starts with about 19 zeros);
+  - the wallet (the address is safe to share; the 12 words are its password: never share or lose them);
+  - pressing Mine BTC to start guessing.
 
   Skipped or finished, the device remembers (`localStorage` `tau.tutorial`) and it doesn't open by itself again. **See tutorial** on the miner opens it again, over the miner.
 - **Search engines and link previews:** a canonical address (bitrush.online; www redirects to it), a description, keywords, Open Graph and Twitter tags with a share image, structured data (the site, the app, and an FAQ in the tutorial's words), icons, a manifest, `robots.txt`, `sitemap.xml` and `llms.txt`. `server/site/scripts/brand-images.mjs` draws the icons and the share image.
